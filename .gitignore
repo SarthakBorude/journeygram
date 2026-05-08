@@ -1,0 +1,21 @@
+.env
+.env.local
+.env.*.local
+
+# Backend
+journeygram/target/
+journeygram/.mvn/wrapper/maven-wrapper.jar
+journeygram/.idea/
+journeygram/*.iml
+
+# Frontend
+journeygram-frontend/node_modules/
+journeygram-frontend/dist/
+journeygram-frontend/dist-ssr/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
