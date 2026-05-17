@@ -28,9 +28,12 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/trips/share/**").permitAll()
-                .requestMatchers("/api/trips/explore").permitAll()
+                .requestMatchers("/api/canvas/invite-info/**").permitAll()
+                .requestMatchers("/api/canvas/explore").permitAll()
+                .requestMatchers("/api/canvas/share/**").permitAll()
+                .requestMatchers("/api/canvas/**").authenticated()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session

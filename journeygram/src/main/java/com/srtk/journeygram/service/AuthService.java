@@ -50,4 +50,9 @@ public class AuthService {
         // Everything checks out — give them a token
         return jwtService.generateToken(user.getEmail());
     }
+
+    public User getCurrentUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
 }
