@@ -52,6 +52,10 @@ public class TripCanvas {
     @Column(unique = true)
     private String shareToken;
 
+    @Lob
+    @Column(name = "cover_image", columnDefinition = "LONGTEXT")
+    private String coverImage;
+
     @Column(nullable = false)
     private Integer likesCount = 0;
 

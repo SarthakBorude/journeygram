@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import axiosInstance from '../api/axiosInstance';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const ITEM_TYPES = [
-    { value: 'PLACE', label: 'Place to Visit', icon: '🏛️', color: 'indigo' },
-    { value: 'FOOD', label: 'Food Spot', icon: '🍜', color: 'amber' },
-    { value: 'HOTEL', label: 'Hotel / Stay', icon: '🏨', color: 'emerald' },
-    { value: 'TRANSPORT', label: 'Transport', icon: '🚗', color: 'sky' },
-    { value: 'NOTE', label: 'Note', icon: '📝', color: 'zinc' },
-    { value: 'BOOKING', label: 'Booking Link', icon: '🔗', color: 'fuchsia' },
+    { value: 'PLACE', label: 'Location', icon: '📍' },
+    { value: 'FOOD', label: 'Dining', icon: '🍽️' },
+    { value: 'HOTEL', label: 'Lodging', icon: '🏨' },
+    { value: 'TRANSPORT', label: 'Transit', icon: '✈️' },
+    { value: 'NOTE', label: 'Note', icon: '📝' },
+    { value: 'BOOKING', label: 'Link', icon: '🔗' },
 ];
 
 const typeConfig = (type) => ITEM_TYPES.find(t => t.value === type) || ITEM_TYPES[4];
@@ -24,7 +24,6 @@ const TripCanvas = () => {
     const [canvas, setCanvas] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [expandedDests, setExpandedDests] = useState({});
     const [addingDest, setAddingDest] = useState(false);
     const [newDestName, setNewDestName] = useState('');
     const [destSuggestions, setDestSuggestions] = useState([]);
@@ -39,12 +38,8 @@ const TripCanvas = () => {
         try {
             const res = await axiosInstance.get(`/api/canvas/${id}`);
             setCanvas(res.data);
-            // Auto-expand all destinations on first load
-            const expanded = {};
-            res.data.destinations?.forEach(d => { expanded[d.id] = true; });
-            setExpandedDests(prev => Object.keys(prev).length === 0 ? expanded : prev);
         } catch (err) {
-            setError('Failed to load canvas');
+            setError('Failed to load blueprint');
         } finally {
             setLoading(false);
         }
@@ -52,9 +47,9 @@ const TripCanvas = () => {
 
     useEffect(() => { fetchCanvas(); }, [fetchCanvas]);
 
-    // Destination Autocomplete Logic
     useEffect(() => {
-        if (!newDestName || newDestName.length < 2 || !addingDest) {
+        const isSearchingFirstStop = canvas && (!canvas.destinations || canvas.destinations.length === 0);
+        if (!newDestName || newDestName.length < 2 || (!addingDest && !isSearchingFirstStop)) {
             setDestSuggestions([]);
             return;
         }
@@ -72,9 +67,7 @@ const TripCanvas = () => {
         }, 500);
 
         return () => clearTimeout(delayDebounceFn);
-    }, [newDestName, addingDest]);
-
-    const toggleDest = (destId) => setExpandedDests(p => ({ ...p, [destId]: !p[destId] }));
+    }, [newDestName, addingDest, canvas]);
 
     const handleAddDestination = async (nameOverride) => {
         const name = nameOverride || newDestName;
@@ -89,7 +82,7 @@ const TripCanvas = () => {
     };
 
     const handleRemoveDestination = async (destId) => {
-        if (!window.confirm('Remove this destination and all its items?')) return;
+        if (!window.confirm('Archive and remove this destination stop?')) return;
         try {
             await axiosInstance.delete(`/api/canvas/destinations/${destId}`);
             fetchCanvas();
@@ -98,7 +91,7 @@ const TripCanvas = () => {
 
     const handleAddItem = async (destId) => {
         if (!newItem.title.trim()) {
-            setError('Please provide a title for the item');
+            setError('Title required');
             return;
         }
         try {
@@ -107,7 +100,7 @@ const TripCanvas = () => {
             setNewItem({ title: '', type: 'PLACE', description: '', url: '', costEstimate: '' });
             setAddingItemTo(null);
             fetchCanvas();
-        } catch { setError('Failed to add item'); }
+        } catch { setError('Failed to save item'); }
     };
 
     const handleRemoveItem = async (itemId) => {
@@ -124,7 +117,7 @@ const TripCanvas = () => {
             const res = await axiosInstance.post(`/api/canvas/destinations/${destId}/ai-suggest`);
             setAiSuggestions(p => ({ ...p, [destId]: res.data }));
         } catch {
-            setError('AI suggestions failed. Try again.');
+            setError('Failed to fetch AI suggestions.');
         } finally {
             setAiLoading(p => ({ ...p, [destId]: false }));
         }
@@ -156,20 +149,19 @@ const TripCanvas = () => {
     const handleVote = async (itemId) => {
         try {
             const res = await axiosInstance.post(`/api/canvas/items/${itemId}/vote`);
-            // Update the item in local state with new vote data
             setCanvas(prev => ({
                 ...prev,
                 destinations: prev.destinations.map(dest => ({
                     ...dest,
                     items: dest.items.map(item =>
                         item.id === itemId
-                            ? { ...item, voteCount: res.data.voteCount, votedByMe: res.data.votedByMe, voterNames: res.data.voterNames }
+                            ? { ...item, voteCount: res.data.voteCount, votedByMe: res.data.votedByMe }
                             : item
                     )
                 }))
             }));
         } catch {
-            setError('Failed to vote');
+            setError('Failed to upvote');
         }
     };
 
@@ -180,273 +172,632 @@ const TripCanvas = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const calculateTotalCost = () => {
+        if (!canvas || !canvas.destinations) return 0;
+        let sum = 0;
+        canvas.destinations.forEach(dest => {
+            if (dest.items) {
+                dest.items.forEach(item => {
+                    if (item.costEstimate) sum += item.costEstimate;
+                });
+            }
+        });
+        return sum;
+    };
+
+    const getCardImage = (canvasId) => {
+        const images = [
+            "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=800",
+            "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=800",
+            "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?q=80&w=800",
+            "https://images.unsplash.com/photo-1488646953014-85cb44e25828?q=80&w=800",
+            "https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=800",
+            "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=800"
+        ];
+        const idNum = Number(canvasId) || 0;
+        return images[idNum % images.length];
+    };
+
     if (loading) return (
-        <div className={`min-h-screen flex items-center justify-center font-['Outfit'] ${isDark ? 'bg-[#09090b]' : 'bg-[#fafafa]'}`}>
-            <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
+        <div className={`min-h-screen flex items-center justify-center font-sans transition-colors duration-500 ${isDark ? "bg-[#09090b]" : "bg-[#fbfbf9]"}`}>
+            <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-800 dark:border-zinc-700 dark:border-t-white rounded-full animate-spin"></div>
         </div>
     );
 
     if (error && !canvas) return (
-        <div className={`min-h-screen flex items-center justify-center font-['Outfit'] ${isDark ? 'bg-[#09090b] text-white' : 'bg-[#fafafa]'}`}>
-            <p className="text-red-500 font-bold">{error}</p>
+        <div className={`min-h-screen flex items-center justify-center font-sans transition-colors duration-500 ${isDark ? "bg-[#09090b] text-white" : "bg-[#fbfbf9] text-zinc-900"}`}>
+            <div className="text-center max-w-md p-6">
+                <span className="text-5xl block mb-6">🗺️</span>
+                <p className="text-red-500 font-bold mb-6">{error}</p>
+                <Link to="/my-trips" className={`px-6 py-3 rounded-full font-bold text-xs uppercase tracking-widest ${isDark ? "bg-white text-zinc-950" : "bg-zinc-950 text-white"}`}>
+                    Return to dashboard
+                </Link>
+            </div>
         </div>
     );
 
-    return (
-        <div className={`min-h-screen transition-all duration-700 font-['Outfit'] overflow-x-hidden pt-24 md:pt-28 pb-16 ${isDark ? 'bg-[#09090b] text-white' : 'bg-[#fafafa] text-zinc-900'}`}>
-            {/* BG */}
-            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className={`absolute top-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full blur-[120px] animate-orb ${isDark ? 'bg-emerald-600/15' : 'bg-emerald-500/8'}`}></div>
-                <div className={`absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] animate-orb-reverse ${isDark ? 'bg-sky-600/15' : 'bg-sky-500/8'}`}></div>
-            </div>
+    const totalCost = calculateTotalCost();
 
-            <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-6">
+    return (
+        <div className={`min-h-screen pt-28 md:pt-40 pb-16 md:pb-24 relative transition-all duration-700 ${
+            isDark 
+                ? "bg-[#09090b]" 
+                : "bg-[radial-gradient(circle_at_top,#faf8ff_0%,#f3eff9_45%,#ebe4f6_100%)]"
+        }`}>
+            {/* Ambient Lighting Background */}
+            <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-violet-400/10 dark:bg-violet-950/5 blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-[20%] left-[-15%] w-[600px] h-[600px] rounded-full bg-indigo-300/10 dark:bg-indigo-950/5 blur-[140px] pointer-events-none" />
+
+            <div className="max-w-[1400px] mx-auto px-5 md:px-8 xl:px-12 relative z-10">
+                
                 {/* Error Toast */}
                 {error && canvas && (
-                    <div className={`mb-6 p-4 rounded-2xl border text-sm font-bold ${isDark ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-red-50 border-red-100 text-red-600'}`}>
-                        ⚠️ {error}
-                        <button onClick={() => setError('')} className="ml-4 opacity-60 hover:opacity-100">✕</button>
+                    <div className="mb-8 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold text-center flex items-center justify-between">
+                        <span>⚠️ {error}</span>
+                        <button onClick={() => setError('')} className="font-extrabold hover:underline">✕</button>
                     </div>
                 )}
 
-                {/* Canvas Header */}
-                <div className={`rounded-[2rem] p-8 md:p-10 mb-8 border ${isDark ? 'bg-white/[0.03] border-white/10' : 'bg-white border-zinc-100 shadow-xl'}`}>
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                        <div className="space-y-3 flex-1">
-                            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] font-bold uppercase tracking-[0.3em] ${isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Collaborative Canvas
+                {/* ── TWO COLUMN DESKTOP GRID ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+                    
+                    {/* ──── LEFT PANEL (STICKY SUMMARY) ──── */}
+                    <div className="lg:col-span-4 lg:sticky lg:top-32 space-y-8">
+                        
+                        {/* Summary Pass */}
+                        <div 
+                            className={`p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] ${
+                                isDark ? "glass-premium-dark" : "glass-premium-light"
+                            } border shadow-lg relative overflow-hidden`}
+                            style={{
+                                backgroundImage: `url(${canvas.coverImage || getCardImage(canvas.id)})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center'
+                            }}
+                        >
+                            <div className="absolute inset-0 bg-black/45 z-0 pointer-events-none" />
+                            
+                            <div className="absolute top-0 right-0 w-24 h-24 opacity-10 select-none pointer-events-none z-10">
+                                <span className="text-8xl">🧭</span>
                             </div>
-                            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tighter">{canvas.name}</h1>
-                            <div className={`flex flex-wrap items-center gap-4 text-xs font-semibold ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                {canvas.startingLocation && <span>📍 From {canvas.startingLocation}</span>}
-                                {canvas.startDate && <span>🗓️ {canvas.startDate} → {canvas.endDate || '...'}</span>}
-                                <span>👥 {canvas.members?.length || 1} member{canvas.members?.length !== 1 ? 's' : ''}</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <button onClick={fetchCanvas} className={`p-3 rounded-xl border transition-all hover:scale-105 ${isDark ? 'bg-white/5 border-white/10 hover:border-white/30' : 'bg-zinc-50 border-zinc-200 hover:border-zinc-400'}`} title="Refresh">
-                                🔄
-                            </button>
-                            <button onClick={copyInviteLink} className={`px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 ${copied ? 'bg-emerald-500 text-white' : isDark ? 'bg-white text-black hover:bg-emerald-400' : 'bg-zinc-900 text-white hover:bg-emerald-600'}`}>
-                                {copied ? '✓ Copied!' : '🔗 Invite'}
-                            </button>
-                        </div>
-                    </div>
 
-                    {/* Members row */}
-                    {canvas.members?.length > 0 && (
-                        <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-white/5 flex items-center gap-2">
-                            <span className={`text-[9px] font-bold uppercase tracking-widest mr-2 ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>Team</span>
-                            {canvas.members.map(m => (
-                                <div key={m.id} className={`px-3 py-1.5 rounded-full text-[10px] font-bold border ${m.role === 'OWNER' ? (isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-700') : (isDark ? 'bg-white/5 border-white/10 text-zinc-400' : 'bg-zinc-50 border-zinc-200 text-zinc-600')}`}>
-                                    {m.user?.name || m.user?.email} {m.role === 'OWNER' && '👑'}
+                            <div className="space-y-6 relative z-10">
+                                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${
+                                    canvas.coverImage 
+                                        ? "bg-white/10 border-white/20 text-white" 
+                                        : "bg-indigo-500/10 dark:bg-violet-400/10 border border-indigo-500/20 dark:border-violet-400/20 text-indigo-600 dark:text-violet-300"
+                                } border`}>
+                                    <span className="text-[9px] tracking-wider uppercase font-bold">
+                                        ✦ Co-Author Console
+                                    </span>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
 
-                {/* Destinations */}
-                <div className="space-y-6">
-                    {canvas.destinations?.map((dest, idx) => (
-                        <div key={dest.id} className={`rounded-[2rem] border overflow-hidden transition-all ${isDark ? 'bg-white/[0.03] border-white/10' : 'bg-white border-zinc-100 shadow-lg'}`}>
-                            {/* Dest Header */}
-                            <div className={`flex items-center justify-between p-6 cursor-pointer select-none ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-zinc-50/80'}`} onClick={() => toggleDest(dest.id)}>
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                                        {idx + 1}
+                                <div>
+                                    <h1 className={`text-3xl font-black tracking-tight leading-tight ${
+                                        canvas.coverImage ? "text-white" : "text-zinc-950 dark:text-white"
+                                    }`}>
+                                        {canvas.name}
+                                    </h1>
+                                    <p className={`text-xs font-semibold mt-2 flex items-center gap-1.5 ${
+                                        canvas.coverImage ? "text-zinc-300" : isDark ? "text-zinc-500" : "text-zinc-400"
+                                    }`}>
+                                        <span>🛫</span>
+                                        <span>From {canvas.startingLocation || 'Anywhere'}</span>
+                                    </p>
+                                </div>
+
+                                <div className={`pt-4 border-t ${
+                                    canvas.coverImage ? "border-white/10" : "border-zinc-200/50 dark:border-zinc-800/40"
+                                } grid grid-cols-2 gap-4`}>
+                                    <div>
+                                        <span className={`text-[9px] font-bold uppercase tracking-wider block ${
+                                            canvas.coverImage ? "text-zinc-400" : "text-zinc-400"
+                                        }`}>Est. Cost</span>
+                                        <span className={`text-lg font-black ${
+                                            canvas.coverImage ? "text-white" : "text-zinc-900 dark:text-white"
+                                        }`}>
+                                            ₹{totalCost.toLocaleString('en-IN')}
+                                        </span>
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-bold tracking-tight">{dest.name}</h3>
-                                        <span className={`text-[10px] font-semibold ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                            {dest.items?.length || 0} items
+                                        <span className={`text-[9px] font-bold uppercase tracking-wider block ${
+                                            canvas.coverImage ? "text-zinc-400" : "text-zinc-400"
+                                        }`}>Stops</span>
+                                        <span className={`text-lg font-black ${
+                                            canvas.coverImage ? "text-white" : "text-zinc-900 dark:text-white"
+                                        }`}>
+                                            {canvas.destinations?.length || 0} stops
                                         </span>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={(e) => { e.stopPropagation(); handleRemoveDestination(dest.id); }} className={`p-2 rounded-lg transition-all opacity-40 hover:opacity-100 ${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'}`}>🗑️</button>
-                                    <span className={`text-lg transition-transform ${expandedDests[dest.id] ? 'rotate-180' : ''}`}>▼</span>
+
+                                {/* Crew Avatars */}
+                                {canvas.members?.length > 0 && (
+                                    <div className={`pt-4 border-t ${
+                                        canvas.coverImage ? "border-white/10" : "border-zinc-200/50 dark:border-zinc-800/40"
+                                    }`}>
+                                        <span className={`text-[9px] font-bold uppercase tracking-wider block mb-3 ${
+                                            canvas.coverImage ? "text-zinc-400" : "text-zinc-400"
+                                        }`}>Flight Crew</span>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {canvas.members.map(m => (
+                                                <div 
+                                                    key={m.id} 
+                                                    className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black border ${
+                                                        m.role === 'OWNER' 
+                                                            ? isDark ? "bg-white text-zinc-950 border-white" : "bg-zinc-950 text-white border-zinc-950"
+                                                            : isDark ? "bg-zinc-800 border-zinc-700 text-zinc-300" : "bg-zinc-100 border-zinc-200 text-zinc-700"
+                                                    }`} 
+                                                    title={`${m.user?.name || m.user?.email} (${m.role})`}
+                                                >
+                                                    {m.user?.name?.[0]?.toUpperCase() || m.user?.email?.[0]?.toUpperCase() || 'U'}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Interactive Actions */}
+                                <div className={`pt-6 border-t ${
+                                    canvas.coverImage ? "border-white/10" : "border-zinc-200/50 dark:border-zinc-800/40"
+                                } flex items-center gap-3`}>
+                                    <button 
+                                        onClick={copyInviteLink} 
+                                        className={`flex-1 py-3.5 rounded-2xl font-bold text-[10px] uppercase tracking-widest cursor-pointer transition-all text-center select-none ${
+                                            copied 
+                                                ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-300" 
+                                                : canvas.coverImage 
+                                                    ? "bg-white text-zinc-950 hover:bg-zinc-200"
+                                                    : isDark ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-zinc-950 text-white hover:bg-zinc-800"
+                                        }`}
+                                    >
+                                        {copied ? 'Link Copied' : 'Invite Crew'}
+                                    </button>
+                                    <button 
+                                        onClick={fetchCanvas} 
+                                        className={`w-12 h-12 flex items-center justify-center rounded-2xl border transition-colors cursor-pointer ${
+                                            isDark ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white" : "bg-zinc-100 border-zinc-200 text-zinc-600 hover:text-zinc-950"
+                                        }`}
+                                        title="Synchronize"
+                                    >
+                                        ⟳
+                                    </button>
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Dest Content */}
-                            {expandedDests[dest.id] && (
-                                <div className={`px-6 pb-6 border-t ${isDark ? 'border-white/5' : 'border-zinc-100'}`}>
-                                    {/* Items */}
-                                    {dest.items?.length > 0 && (
-                                        <div className="mt-4 space-y-3">
-                                            {dest.items.map(item => {
-                                                const tc = typeConfig(item.type);
-                                                return (
-                                                    <div key={item.id} className={`group flex items-start gap-4 p-4 rounded-2xl border transition-all ${isDark ? 'bg-white/[0.02] border-white/5 hover:border-white/10' : 'bg-zinc-50/50 border-zinc-100 hover:border-zinc-200'}`}>
-                                                        <span className="text-xl mt-0.5">{tc.icon}</span>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <span className="font-bold text-sm">{item.title}</span>
-                                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${isDark ? 'bg-white/5 text-zinc-500' : 'bg-zinc-100 text-zinc-500'}`}>{tc.label}</span>
-                                                                {item.aiSuggestion && <span className="text-[9px] text-amber-500 font-bold">✨ AI</span>}
-                                                            </div>
-                                                            {item.description && <p className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{item.description}</p>}
-                                                            <div className={`flex items-center gap-3 mt-2 text-[10px] font-semibold ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                                                {item.costEstimate && <span>₹{item.costEstimate.toLocaleString('en-IN')}</span>}
-                                                                {item.url && <a href={item.url} target="_blank" rel="noreferrer" className="text-indigo-500 hover:underline">🔗 Link</a>}
-                                                                <span>by {item.addedBy?.name || item.addedBy?.email}</span>
-                                                            </div>
-
-                                                            {/* Vote Section */}
-                                                            <div className="flex items-center gap-3 mt-3">
-                                                                <button
-                                                                    onClick={() => handleVote(item.id)}
-                                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all hover:scale-105 active:scale-95 border ${
-                                                                        item.votedByMe
-                                                                            ? (isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-600')
-                                                                            : (isDark ? 'bg-white/5 border-white/10 text-zinc-500 hover:border-emerald-500/30 hover:text-emerald-400' : 'bg-white border-zinc-200 text-zinc-400 hover:border-emerald-300 hover:text-emerald-600')
-                                                                    }`}
-                                                                >
-                                                                    👍 {item.voteCount || 0}
-                                                                </button>
-                                                                {item.voterNames?.length > 0 && (
-                                                                    <div className={`flex items-center gap-1 flex-wrap text-[9px] font-semibold ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                                                        {item.voterNames.slice(0, 4).map((name, i) => (
-                                                                            <span key={i} className={`px-2 py-0.5 rounded-full ${isDark ? 'bg-white/5' : 'bg-zinc-100'}`}>
-                                                                                {name}
-                                                                            </span>
-                                                                        ))}
-                                                                        {item.voterNames.length > 4 && (
-                                                                            <span className="opacity-60">+{item.voterNames.length - 4} more</span>
-                                                                        )}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <button onClick={() => handleRemoveItem(item.id)} className="opacity-0 group-hover:opacity-60 hover:!opacity-100 p-1.5 rounded-lg text-xs transition-all">✕</button>
-                                                    </div>
-                                                );
-                                            })}
+                        {/* Stop progression visual checklist */}
+                        {canvas.destinations?.length > 0 && (
+                            <div className={`p-6 rounded-3xl ${
+                                isDark ? "bg-zinc-950/40 border border-zinc-800/80" : "bg-white/40 border border-zinc-200/60"
+                            } backdrop-blur-xl hidden lg:block`}>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-4">Route Progress</span>
+                                <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-zinc-200 dark:before:bg-zinc-800">
+                                    {canvas.destinations.map((dest, dIdx) => (
+                                        <div key={dest.id} className="relative flex items-center justify-between gap-4">
+                                            {/* dot */}
+                                            <div className="absolute left-[-21px] w-3 h-3 rounded-full border-2 bg-indigo-500 border-white dark:border-zinc-950 shadow-sm" />
+                                            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">{dest.name}</span>
+                                            <span className="text-[10px] font-black text-zinc-400 shrink-0">STOP {dIdx + 1}</span>
                                         </div>
-                                    )}
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
-                                    {/* AI Suggestions */}
-                                    {aiSuggestions[dest.id]?.length > 0 && (
-                                        <div className="mt-4 space-y-3">
-                                            <div className={`text-[9px] font-bold uppercase tracking-widest ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>✨ AI Suggestions</div>
-                                            {aiSuggestions[dest.id].map((s, i) => {
-                                                const tc = typeConfig(s.type);
-                                                return (
-                                                    <div key={i} className={`flex items-start gap-4 p-4 rounded-2xl border-2 border-dashed transition-all ${isDark ? 'border-amber-500/20 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}>
-                                                        <span className="text-xl mt-0.5">{tc.icon}</span>
-                                                        <div className="flex-1 min-w-0">
-                                                            <span className="font-bold text-sm">{s.title}</span>
-                                                            {s.description && <p className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{s.description}</p>}
-                                                            {s.costEstimate && <span className={`text-[10px] font-semibold ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>₹{Number(s.costEstimate).toLocaleString('en-IN')}</span>}
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => handleAcceptSuggestion(dest.id, s)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500 text-white hover:bg-emerald-600 transition-all">✓ Add</button>
-                                                            <button onClick={() => handleDismissSuggestion(dest.id, s.title)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-zinc-100 hover:bg-zinc-200'}`}>✕</button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-
-                                    {/* Add Item Form */}
-                                    {addingItemTo === dest.id ? (
-                                        <div className={`mt-4 p-5 rounded-2xl border space-y-4 ${isDark ? 'bg-white/[0.02] border-white/10' : 'bg-zinc-50 border-zinc-200'}`}>
-                                            <input autoFocus value={newItem.title} onChange={e => setNewItem(p => ({...p, title: e.target.value}))} placeholder="Item title" className={`w-full bg-transparent border-b py-2 text-sm font-bold outline-none ${isDark ? 'border-white/10 focus:border-emerald-500 text-white' : 'border-zinc-200 focus:border-zinc-900 text-zinc-900'}`} />
-                                            <div className="flex flex-wrap gap-2">
-                                                {ITEM_TYPES.map(t => (
-                                                    <button key={t.value} type="button" onClick={() => setNewItem(p => ({...p, type: t.value}))} className={`px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-all ${newItem.type === t.value ? (isDark ? 'bg-white text-black border-white' : 'bg-zinc-900 text-white border-zinc-900') : (isDark ? 'bg-white/5 border-white/10 text-zinc-500' : 'bg-white border-zinc-200 text-zinc-400')}`}>
-                                                        {t.icon} {t.label}
+                    {/* ──── RIGHT PANEL (ACTIVE SCRAPBOOK STOPS) ──── */}
+                    <div className="lg:col-span-8 space-y-12">
+                        
+                        {canvas.destinations?.length === 0 ? (
+                            <div className="text-center py-12 md:py-20 px-5 md:px-8 rounded-[2rem] md:rounded-[2.5rem] border border-dashed border-zinc-200 dark:border-zinc-800/80 bg-white/30 dark:bg-zinc-900/10 backdrop-blur-xl">
+                                <div className="max-w-md mx-auto space-y-6">
+                                    <span className="text-5xl block select-none">🗺️</span>
+                                    <div>
+                                        <p className={`text-xl font-black mb-2 ${isDark ? "text-zinc-300" : "text-zinc-950"}`}>
+                                            No Stops Added Yet
+                                        </p>
+                                        <p className={`text-xs max-w-xs mx-auto ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                                            This scrapbook needs destinations! Add your first target stop right here to start listing spots.
+                                        </p>
+                                    </div>
+                                    
+                                    <div className={`p-6 rounded-3xl ${
+                                        isDark ? "bg-zinc-950/40 border-zinc-800" : "bg-white/50 border-zinc-150"
+                                    } border text-left space-y-4`}>
+                                        <input 
+                                            value={newDestName} 
+                                            onChange={e => setNewDestName(e.target.value)} 
+                                            placeholder="Enter first stop name (e.g. Kyoto, Japan)" 
+                                            className={`w-full bg-transparent text-base font-extrabold outline-none border-b pb-2 ${
+                                                isDark 
+                                                    ? "border-zinc-800 focus:border-violet-400 text-white placeholder:text-zinc-700" 
+                                                    : "border-zinc-200 focus:border-indigo-500 text-zinc-900 placeholder:text-zinc-300"
+                                            }`} 
+                                        />
+                                        
+                                        {destSuggestions.length > 0 && (
+                                            <div className={`rounded-2xl border overflow-hidden shadow-md max-h-60 overflow-y-auto ${
+                                                isDark ? "border-zinc-800 bg-zinc-900" : "border-zinc-200 bg-white"
+                                            }`}>
+                                                {destSuggestions.map((s, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        onClick={() => handleAddDestination(s.display_name)}
+                                                        className={`w-full text-left px-4 py-3 flex flex-col transition-colors border-b last:border-0 cursor-pointer ${
+                                                            isDark ? "hover:bg-zinc-800 border-zinc-800 text-white" : "hover:bg-zinc-50 border-zinc-150 text-zinc-900"
+                                                        }`}
+                                                    >
+                                                        <span className="font-extrabold text-xs truncate">{s.display_name.split(',')[0]}</span>
+                                                        <span className={`text-[10px] truncate ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                                                            {s.display_name.split(',').slice(1).join(',').trim()}
+                                                        </span>
                                                     </button>
                                                 ))}
                                             </div>
-                                            <textarea value={newItem.description} onChange={e => setNewItem(p => ({...p, description: e.target.value}))} placeholder="Description (optional)" rows={2} className={`w-full bg-transparent border rounded-xl p-3 text-xs outline-none resize-none ${isDark ? 'border-white/10 focus:border-emerald-500' : 'border-zinc-200 focus:border-zinc-900'}`} />
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <input value={newItem.url} onChange={e => setNewItem(p => ({...p, url: e.target.value}))} placeholder="URL (optional)" className={`bg-transparent border rounded-xl p-3 text-xs outline-none ${isDark ? 'border-white/10' : 'border-zinc-200'}`} />
-                                                <input value={newItem.costEstimate} onChange={e => setNewItem(p => ({...p, costEstimate: e.target.value}))} placeholder="Cost ₹ (optional)" type="number" className={`bg-transparent border rounded-xl p-3 text-xs outline-none ${isDark ? 'border-white/10' : 'border-zinc-200'}`} />
-                                            </div>
-                                            <div className="flex gap-3">
-                                                <button onClick={() => handleAddItem(dest.id)} className="px-5 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-emerald-500 text-white hover:bg-emerald-600 transition-all">Add Item</button>
-                                                <button onClick={() => { setAddingItemTo(null); setNewItem({ title: '', type: 'PLACE', description: '', url: '', costEstimate: '' }); }} className={`px-5 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all ${isDark ? 'border-white/10 hover:border-white/30' : 'border-zinc-200 hover:border-zinc-400'}`}>Cancel</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="mt-4 flex flex-wrap gap-3">
-                                            <button onClick={() => setAddingItemTo(dest.id)} className={`px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all hover:scale-105 ${isDark ? 'bg-white/5 border-white/10 hover:border-emerald-500 hover:text-emerald-400' : 'bg-zinc-50 border-zinc-200 hover:border-emerald-500 hover:text-emerald-600'}`}>
-                                                + Add Item
-                                            </button>
-                                            <button onClick={() => handleAiSuggest(dest.id)} disabled={aiLoading[dest.id]} className={`px-5 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all hover:scale-105 ${aiLoading[dest.id] ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 hover:border-amber-400' : 'bg-amber-50 border-amber-200 text-amber-600 hover:border-amber-500'}`}>
-                                                {aiLoading[dest.id] ? (
-                                                    <span className="flex items-center gap-2"><span className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin"></span> Thinking...</span>
-                                                ) : '🤖 Get AI Suggestions'}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
+                                        )}
 
-                {/* Add Destination */}
-                <div className="mt-8 relative">
-                    {addingDest ? (
-                        <div className={`rounded-[2rem] p-8 border transition-all duration-500 animate-in zoom-in-95 ${isDark ? 'bg-white/[0.03] border-white/10' : 'bg-white border-zinc-100 shadow-2xl'}`}>
-                            <div className="relative group">
-                                <span className="absolute left-0 top-1/2 -translate-y-1/2 text-2xl opacity-40 group-focus-within:opacity-100 transition-opacity">🔍</span>
-                                <input 
-                                    value={newDestName} 
-                                    onChange={e => setNewDestName(e.target.value)} 
-                                    placeholder="Where to next? (e.g. Ujjain, Kyoto)" 
-                                    autoFocus 
-                                    className={`w-full bg-transparent border-b-2 pl-10 py-4 text-2xl md:text-3xl font-bold outline-none transition-all placeholder:opacity-20 ${isDark ? 'border-white/10 focus:border-emerald-500 text-white' : 'border-zinc-200 focus:border-zinc-900 text-zinc-900'}`} 
-                                />
-                                {suggestLoading && (
-                                    <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                                        <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Suggestions Dropdown */}
-                            {destSuggestions.length > 0 && (
-                                <div className={`mt-4 rounded-2xl border overflow-hidden animate-in slide-in-from-top-2 duration-300 ${isDark ? 'bg-[#18181b] border-white/10' : 'bg-white border-zinc-100 shadow-2xl'}`}>
-                                    {destSuggestions.map((s, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={() => handleAddDestination(s.display_name)}
-                                            className={`w-full text-left px-6 py-4 flex items-center gap-4 transition-colors ${isDark ? 'hover:bg-white/5 border-b border-white/5 last:border-0' : 'hover:bg-zinc-50 border-b border-zinc-50 last:border-0'}`}
+                                        <button 
+                                            onClick={() => handleAddDestination()} 
+                                            className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer text-center select-none shadow-sm ${
+                                                isDark ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-zinc-950 text-white hover:bg-zinc-800"
+                                            }`}
                                         >
-                                            <span className="text-xl opacity-50">📍</span>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="font-bold text-sm truncate">{s.display_name.split(',')[0]}</div>
-                                                <div className={`text-[10px] font-medium truncate ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                                    {s.display_name.split(',').slice(1).join(',').trim()}
+                                            Add First Stop 🛫
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-12">
+                                {canvas.destinations.map((dest, dIdx) => (
+                                    <div 
+                                        key={dest.id} 
+                                        className={`p-5 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem] ${
+                                            isDark ? "glass-premium-dark" : "glass-premium-light"
+                                        } border transition-all duration-300 relative`}
+                                    >
+                                        {/* Stop Header badge */}
+                                        <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-200/50 dark:border-zinc-800/40">
+                                            <div className="space-y-1">
+                                                <span className="text-[9px] font-black tracking-widest uppercase text-indigo-600 dark:text-violet-400">Stop {dIdx + 1}</span>
+                                                <h2 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">
+                                                    {dest.name}
+                                                </h2>
+                                            </div>
+                                            
+                                            <button 
+                                                onClick={() => handleRemoveDestination(dest.id)} 
+                                                className={`text-xs font-bold transition-colors ${
+                                                    isDark ? "text-zinc-600 hover:text-red-400" : "text-zinc-400 hover:text-red-500"
+                                                }`}
+                                            >
+                                                Remove Stop
+                                            </button>
+                                        </div>
+
+                                        {/* Canvas Items List */}
+                                        {dest.items?.length > 0 ? (
+                                            <div className="space-y-5 mb-8">
+                                                {dest.items.map((item) => {
+                                                    const tc = typeConfig(item.type);
+                                                    return (
+                                                        <div 
+                                                            key={item.id} 
+                                                            className={`group/item p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-4 ${
+                                                                isDark 
+                                                                    ? "bg-zinc-900/30 hover:bg-zinc-900/50 border-zinc-800/60" 
+                                                                    : "bg-zinc-50/60 hover:bg-white border-zinc-100"
+                                                            }`}
+                                                        >
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                                                    <span className="text-xl select-none">{tc.icon}</span>
+                                                                    <span className="font-extrabold text-base text-zinc-950 dark:text-white">{item.title}</span>
+                                                                    <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                                                                        isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-200/50 text-zinc-500"
+                                                                    }`}>
+                                                                        {tc.label}
+                                                                    </span>
+                                                                    {item.aiSuggestion && (
+                                                                        <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                                                            AI Idea
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                {item.description && (
+                                                                    <p className={`text-sm leading-relaxed mb-3 pl-8 ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+                                                                        {item.description}
+                                                                    </p>
+                                                                )}
+                                                                
+                                                                <div className="flex items-center gap-4 pl-8 flex-wrap">
+                                                                    {item.costEstimate && (
+                                                                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${
+                                                                            isDark ? "bg-zinc-800/40 text-zinc-300 border-zinc-800" : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                                                                        }`}>
+                                                                            ₹{item.costEstimate.toLocaleString('en-IN')}
+                                                                        </span>
+                                                                    )}
+                                                                    {item.url && (
+                                                                        <a href={item.url} target="_blank" rel="noreferrer" className={`text-xs font-bold hover:underline ${
+                                                                            isDark ? "text-violet-300" : "text-indigo-600"
+                                                                        }`}>
+                                                                            Booking Link ↗
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Upvote Meters & Trash actions */}
+                                                            <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4 pt-3 sm:pt-0 border-t border-dashed border-zinc-200/30 dark:border-zinc-800/20 sm:border-0 shrink-0">
+                                                                <button
+                                                                    onClick={() => handleVote(item.id)}
+                                                                    className={`flex items-center gap-2 text-xs font-black transition-all px-3 py-1.5 rounded-xl cursor-pointer hover:scale-105 active:scale-95 ${
+                                                                        item.votedByMe
+                                                                            ? "bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 dark:bg-violet-400/10 dark:text-violet-300 dark:border-violet-400/20"
+                                                                            : isDark ? "bg-zinc-800/50 text-zinc-500 border border-zinc-800/50 hover:text-white" : "bg-zinc-100 text-zinc-400 border border-zinc-200/50 hover:text-zinc-900"
+                                                                    }`}
+                                                                >
+                                                                    <span>▲</span>
+                                                                    <span>{item.voteCount || 0}</span>
+                                                                </button>
+                                                                
+                                                                <button 
+                                                                    onClick={() => handleRemoveItem(item.id)} 
+                                                                    className={`opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100 transition-opacity text-xs font-bold cursor-pointer ${
+                                                                        isDark ? "text-zinc-600 hover:text-red-400" : "text-zinc-400 hover:text-red-500"
+                                                                    }`}
+                                                                    title="Remove Item"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <p className={`text-xs font-semibold mb-8 italic ${isDark ? "text-zinc-600" : "text-zinc-400"}`}>
+                                                No plans mapped for this stop yet. Click below to add places or pull AI recommendations.
+                                            </p>
+                                        )}
+
+                                        {/* AI Suggestions Box (Glowing recommendation list) */}
+                                        {aiSuggestions[dest.id]?.length > 0 && (
+                                            <div className="space-y-4 mb-8 pt-4 border-t border-dashed border-zinc-200/50 dark:border-zinc-800/40">
+                                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 mb-2">
+                                                    <span className="text-[8px] tracking-wider uppercase font-black text-blue-500">
+                                                        ✦ AI Recommendations Guide
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="space-y-4">
+                                                    {aiSuggestions[dest.id].map((s, i) => {
+                                                        const tc = typeConfig(s.type);
+                                                        return (
+                                                            <div key={i} className={`flex flex-col sm:flex-row sm:items-start gap-4 p-4 sm:p-5 rounded-2xl border ${
+                                                                isDark ? "border-blue-900/30 bg-blue-950/10" : "border-blue-100 bg-blue-50/20"
+                                                            }`}>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+                                                                        <span className="text-lg select-none">{tc.icon}</span>
+                                                                        <span className="font-extrabold text-sm text-zinc-950 dark:text-white">{s.title}</span>
+                                                                    </div>
+                                                                    {s.description && (
+                                                                        <p className={`text-xs leading-relaxed pl-7 ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+                                                                            {s.description}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-2 pt-3 sm:pt-0 border-t border-dashed border-blue-500/20 dark:border-blue-500/10 sm:border-0 shrink-0">
+                                                                    <button 
+                                                                        onClick={() => handleAcceptSuggestion(dest.id, s)} 
+                                                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
+                                                                            isDark ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-zinc-950 text-white hover:bg-zinc-800"
+                                                                        }`}
+                                                                    >
+                                                                        Add
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleDismissSuggestion(dest.id, s.title)} 
+                                                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${
+                                                                            isDark ? "hover:bg-zinc-900 text-zinc-400 border-zinc-800" : "hover:bg-zinc-100 text-zinc-500 border-zinc-200"
+                                                                        }`}
+                                                                    >
+                                                                        Dismiss
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                            <span className={`text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Select</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
+                                        )}
 
-                            <div className="flex gap-3 mt-8">
-                                <button onClick={() => handleAddDestination()} className={`px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95 ${isDark ? 'bg-white text-black hover:bg-emerald-400' : 'bg-zinc-900 text-white hover:bg-emerald-600'}`}>
-                                    Add Destination
-                                </button>
-                                <button onClick={() => { setAddingDest(false); setNewDestName(''); setDestSuggestions([]); }} className={`px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border transition-all hover:scale-105 active:scale-95 ${isDark ? 'border-white/10 hover:border-white/30 text-white' : 'border-zinc-200 hover:border-zinc-400 text-zinc-600'}`}>
-                                    Cancel
-                                </button>
+                                        {/* Add Item form */}
+                                        {addingItemTo === dest.id ? (
+                                            <div className={`p-6 rounded-2xl border ${isDark ? "bg-zinc-900/20 border-zinc-850" : "bg-zinc-50 border-zinc-200/50"} space-y-5 shadow-sm`}>
+                                                <input 
+                                                    autoFocus 
+                                                    value={newItem.title} 
+                                                    onChange={e => setNewItem(p => ({...p, title: e.target.value}))} 
+                                                    placeholder="Activity Name (e.g. Kyoto Imperial Palace)" 
+                                                    className={`w-full bg-transparent text-lg font-extrabold outline-none border-b pb-2 ${
+                                                        isDark ? "border-zinc-800 focus:border-violet-400 text-white placeholder:text-zinc-700" : "border-zinc-200 focus:border-indigo-500 text-zinc-900 placeholder:text-zinc-300"
+                                                    }`} 
+                                                />
+                                                
+                                                <div className="space-y-1.5">
+                                                    <span className={`text-[8px] font-black uppercase tracking-wider pl-1 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>Category Type</span>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {ITEM_TYPES.map(t => (
+                                                            <button 
+                                                                key={t.value} 
+                                                                type="button" 
+                                                                onClick={() => setNewItem(p => ({...p, type: t.value}))} 
+                                                                className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                                                    newItem.type === t.value 
+                                                                        ? isDark ? "bg-white text-zinc-950 shadow" : "bg-zinc-950 text-white shadow" 
+                                                                        : isDark ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400" : "bg-zinc-100 hover:bg-zinc-200/60 text-zinc-600"
+                                                                }`}
+                                                            >
+                                                                {t.icon} {t.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <span className={`text-[8px] font-black uppercase tracking-wider pl-1 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>URL Link</span>
+                                                        <input 
+                                                            value={newItem.url} 
+                                                            onChange={e => setNewItem(p => ({...p, url: e.target.value}))} 
+                                                            placeholder="https://booking.com/etc" 
+                                                            className="w-full px-4 py-3 rounded-xl text-xs outline-none bg-zinc-50/50 dark:bg-zinc-900/40 text-zinc-900 dark:text-white premium-input" 
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <span className={`text-[8px] font-black uppercase tracking-wider pl-1 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>Cost (INR)</span>
+                                                        <input 
+                                                            value={newItem.costEstimate} 
+                                                            onChange={e => setNewItem(p => ({...p, costEstimate: e.target.value}))} 
+                                                            placeholder="e.g. 5000" 
+                                                            type="number" 
+                                                            className="w-full px-4 py-3 rounded-xl text-xs outline-none bg-zinc-50/50 dark:bg-zinc-900/40 text-zinc-900 dark:text-white premium-input" 
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <span className={`text-[8px] font-black uppercase tracking-wider pl-1 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>Notes & Description</span>
+                                                    <textarea 
+                                                        value={newItem.description} 
+                                                        onChange={e => setNewItem(p => ({...p, description: e.target.value}))} 
+                                                        placeholder="Add stops details, schedules, transit details..." 
+                                                        rows={2} 
+                                                        className="w-full px-4 py-3 rounded-xl text-xs outline-none bg-zinc-50/50 dark:bg-zinc-900/40 text-zinc-900 dark:text-white resize-none premium-input" 
+                                                    />
+                                                </div>
+
+                                                <div className="flex gap-3 pt-2">
+                                                    <button 
+                                                        onClick={() => handleAddItem(dest.id)} 
+                                                        className={`px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer ${
+                                                            isDark ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-zinc-950 text-white hover:bg-zinc-800"
+                                                        }`}
+                                                    >
+                                                        Save Item
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => { setAddingItemTo(null); setNewItem({ title: '', type: 'PLACE', description: '', url: '', costEstimate: '' }); }} 
+                                                        className={`px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer border ${
+                                                            isDark ? "hover:bg-zinc-900 text-zinc-400 border-zinc-800" : "hover:bg-zinc-100 text-zinc-500 border-zinc-200"
+                                                        }`}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-4 pt-4 border-t border-dashed border-zinc-200/50 dark:border-zinc-800/40 flex-wrap">
+                                                <button 
+                                                    onClick={() => setAddingItemTo(dest.id)} 
+                                                    className={`inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest transition-colors cursor-pointer ${
+                                                        isDark ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-950"
+                                                    }`}
+                                                >
+                                                    <span>+ Add Custom Spot</span>
+                                                </button>
+                                                <span className={isDark ? "text-zinc-800" : "text-zinc-200"}>|</span>
+                                                <button 
+                                                    onClick={() => handleAiSuggest(dest.id)} 
+                                                    disabled={aiLoading[dest.id]} 
+                                                    className={`inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-widest transition-colors cursor-pointer ${
+                                                        aiLoading[dest.id] ? "opacity-50" : ""
+                                                    } ${isDark ? "text-violet-300 hover:text-violet-200" : "text-indigo-600 hover:text-indigo-800"}`}
+                                                >
+                                                    {aiLoading[dest.id] ? "Loading ideas..." : "✨ Brainstorm AI Ideas"}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
+                        )}
+
+                        {/* ── ADD DESTINATION STOP INPUT ── */}
+                        <div className={`p-8 rounded-[2.5rem] ${
+                            isDark ? "bg-zinc-900/10 border-zinc-850/60" : "bg-white/30 border-zinc-200/40"
+                        } border backdrop-blur-xl`}>
+                            {addingDest ? (
+                                <div className="max-w-md space-y-4">
+                                    <input 
+                                        value={newDestName} 
+                                        onChange={e => setNewDestName(e.target.value)} 
+                                        placeholder="Add Stop Name (e.g. Kyoto, Japan)" 
+                                        autoFocus 
+                                        className={`w-full bg-transparent text-xl font-black outline-none border-b pb-2 ${
+                                            isDark ? "border-zinc-800 focus:border-violet-400 text-white placeholder:text-zinc-700" : "border-zinc-200 focus:border-indigo-500 text-zinc-900 placeholder:text-zinc-300"
+                                        }`} 
+                                    />
+                                    
+                                    {destSuggestions.length > 0 && (
+                                        <div className={`rounded-2xl border overflow-hidden shadow-md max-h-60 overflow-y-auto ${
+                                            isDark ? "border-zinc-800 bg-zinc-900" : "border-zinc-200 bg-white"
+                                        }`}>
+                                            {destSuggestions.map((s, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => handleAddDestination(s.display_name)}
+                                                    className={`w-full text-left px-4 py-3 flex flex-col transition-colors border-b last:border-0 ${
+                                                        isDark ? "hover:bg-zinc-800 border-zinc-800 text-white" : "hover:bg-zinc-50 border-zinc-150 text-zinc-900"
+                                                    }`}
+                                                >
+                                                    <span className="font-extrabold text-xs truncate">{s.display_name.split(',')[0]}</span>
+                                                    <span className={`text-[10px] truncate ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                                                        {s.display_name.split(',').slice(1).join(',').trim()}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3">
+                                        <button 
+                                            onClick={() => handleAddDestination()} 
+                                            className={`px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer ${
+                                                isDark ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-zinc-950 text-white hover:bg-zinc-800"
+                                            }`}
+                                        >
+                                            Confirm Stop
+                                        </button>
+                                        <button 
+                                            onClick={() => { setAddingDest(false); setNewDestName(''); setDestSuggestions([]); }} 
+                                            className={`px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer border ${
+                                                isDark ? "hover:bg-zinc-900 text-zinc-400 border-zinc-800" : "hover:bg-zinc-100 text-zinc-500 border-zinc-200"
+                                            }`}
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => setAddingDest(true)} 
+                                    className={`inline-flex items-center gap-2 text-sm font-extrabold uppercase tracking-widest transition-colors cursor-pointer ${
+                                        isDark ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-950"
+                                    }`}
+                                >
+                                    <span>+ Append Journey Stop</span>
+                                    <span>🗺️</span>
+                                </button>
+                            )}
                         </div>
-                    ) : (
-                        <button onClick={() => setAddingDest(true)} className={`group w-full py-10 rounded-[2.5rem] border-2 border-dashed transition-all duration-500 hover:scale-[1.01] flex flex-col items-center justify-center gap-3 ${isDark ? 'border-white/10 text-zinc-600 hover:border-emerald-500/50 hover:text-emerald-400' : 'border-zinc-200 text-zinc-400 hover:border-emerald-500 hover:text-emerald-600'}`}>
-                            <span className="text-3xl transition-transform group-hover:scale-125 group-hover:rotate-12 duration-500">➕</span>
-                            <span className="text-[11px] font-black uppercase tracking-[0.4em]">Add Another Destination</span>
-                        </button>
-                    )}
+                    </div>
                 </div>
             </div>
         </div>

@@ -8,4 +8,5 @@ public class CanvasRequest {
     private String startDate;   // yyyy-MM-dd
     private String endDate;     // yyyy-MM-dd
     private String startingLocation;
+    private String coverImage;
 }

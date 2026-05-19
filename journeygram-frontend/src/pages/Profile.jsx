@@ -9,19 +9,19 @@ const Profile = () => {
     const { theme } = useTheme();
     const isDark = theme === 'dark';
     const [profile, setProfile] = useState(null);
-    const [trips, setTrips] = useState([]);
+    const [canvases, setCanvases] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const fetchData = async () => {
         try {
-            const [profileRes, tripsRes] = await Promise.all([
+            const [profileRes, canvasRes] = await Promise.all([
                 axiosInstance.get("/api/auth/me"),
-                axiosInstance.get("/api/trips/my")
+                axiosInstance.get("/api/canvas/my")
             ]);
             setProfile(profileRes.data);
-            setTrips(tripsRes.data);
+            setCanvases(canvasRes.data);
         } catch (err) {
-            console.error("Failed to fetch profile data", err);
+            console.error("Failed to fetch profile ledger", err);
         } finally {
             setLoading(false);
         }
@@ -31,217 +31,200 @@ const Profile = () => {
         fetchData();
     }, []);
 
-    const handleToggleVisibility = async (tripId) => {
+    const handleToggleVisibility = async (canvasId) => {
         try {
-            const response = await axiosInstance.patch(`/api/trips/${tripId}/visibility`);
-            setTrips((prev) =>
-                prev.map((t) => (t.id === tripId ? response.data : t))
+            const response = await axiosInstance.patch(`/api/canvas/${canvasId}/visibility`);
+            setCanvases((prev) =>
+                prev.map((c) => (c.id === canvasId ? response.data : c))
             );
         } catch (err) {
             console.error("Failed to toggle visibility", err);
         }
     };
 
-    const handleDelete = async (tripId) => {
-        if (!window.confirm("Delete this trip forever from your journal?")) return;
+    const handleDelete = async (canvasId) => {
+        if (!window.confirm("Archive and delete this travel blueprint permanently? All co-pilots will lose access.")) return;
         try {
-            await axiosInstance.delete(`/api/trips/${tripId}`);
-            setTrips((prev) => prev.filter((t) => t.id !== tripId));
+            await axiosInstance.delete(`/api/canvas/${canvasId}`);
+            setCanvases((prev) => prev.filter((c) => c.id !== canvasId));
         } catch (err) {
-            console.error("Failed to delete trip", err);
+            console.error("Failed to delete canvas", err);
         }
+    };
+
+    const getDurationDays = (start, end) => {
+        if (!start || !end) return "Flexible Duration";
+        const s = new Date(start);
+        const e = new Date(end);
+        const diff = Math.ceil((e - s) / (1000 * 60 * 60 * 24));
+        return diff > 0 ? `${diff} Days` : "1 Day";
     };
 
     if (loading) {
         return (
-            <div className={`min-h-screen flex justify-center items-center ${isDark ? 'bg-[#09090b]' : 'bg-[#f8f7ff]'}`}>
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500"></div>
+            <div className={`min-h-screen flex justify-center items-center font-sans ${isDark ? 'bg-[#09090b]' : 'bg-[#fbfbf9]'}`}>
+                <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-800 dark:border-zinc-700 dark:border-t-white rounded-full animate-spin"></div>
             </div>
         );
     }
 
-    const userInitial = profile?.name ? profile.name.charAt(0).toUpperCase() : (profile?.email ? profile.email.charAt(0).toUpperCase() : "?");
+    const userInitial = profile?.name 
+        ? profile.name.charAt(0).toUpperCase() 
+        : (profile?.email ? profile.email.charAt(0).toUpperCase() : "🛫");
 
     return (
-        <div className={`min-h-screen transition-all duration-700 font-['Outfit'] overflow-x-hidden relative ${isDark ? 'bg-[#09090b] text-white' : 'bg-[#f8f7ff] text-zinc-900'}`}>
-            
-            {/* ── BACKGROUND LAYERS (Cohesive Theme) ────────────────────────── */}
-            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute inset-0 bg-map-grid opacity-[0.15]"></div>
+        <div className={`min-h-screen pt-28 md:pt-40 pb-16 md:pb-24 relative overflow-hidden transition-all duration-700 ${
+            isDark 
+                ? "bg-[#09090b]" 
+                : "bg-[radial-gradient(circle_at_top,#faf8ff_0%,#f3eff9_45%,#ebe4f6_100%)]"
+        }`}>
+            {/* Ambient Lighting Background */}
+            <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-violet-400/10 dark:bg-violet-950/5 blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-[20%] left-[-15%] w-[600px] h-[600px] rounded-full bg-indigo-300/10 dark:bg-indigo-950/5 blur-[140px] pointer-events-none" />
+
+            <div className="max-w-4xl mx-auto px-6 relative z-10">
                 
-                {/* Purple/Pink Wash */}
-                <div className={`absolute top-[-20%] left-[-10%] w-[100%] h-[100%] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-violet-900/10' : 'bg-violet-200/30'}`}></div>
-                <div className={`absolute bottom-[-10%] right-[-10%] w-[80%] h-[80%] rounded-full blur-[150px] transition-all duration-1000 ${isDark ? 'bg-pink-900/5' : 'bg-pink-100/20'}`}></div>
-
-                {/* Faint Flight Path */}
-                <svg className="absolute inset-0 w-full h-full opacity-10" viewBox="0 0 1000 1000">
-                    <path d="M-100,500 Q200,300 500,500 T1100,500" fill="none" stroke="currentColor" strokeWidth="0.5" strokeDasharray="10,10" className="flight-path" />
-                </svg>
-            </div>
-
-            {/* ── PREMIUM VOYAGER ID HEADER ───────────────────────────────────── */}
-            <div className="relative z-10 pt-32 pb-16 px-6">
-                <div className="max-w-7xl mx-auto">
-                    <div className="relative group">
-                        {/* Background Decorative Layer (Map-like) */}
-                        <div className={`absolute -inset-4 rounded-[2.5rem] shadow-sm rotate-[-1deg] opacity-40 z-0 border transition-all ${isDark ? 'bg-zinc-800/40 border-white/5' : 'bg-[#e8e4db] border-white/50'}`}></div>
-                        
-                        <div className={`relative p-10 md:p-16 rounded-[2rem] shadow-[0_30px_70px_-10px_rgba(0,0,0,0.1)] z-10 flex flex-col md:flex-row items-center gap-10 md:gap-16 border transition-all ${isDark ? 'bg-zinc-900/80 border-white/10' : 'bg-white/80 backdrop-blur-xl border-white'}`}>
-                            {/* Washi tapes pinning the ID */}
-                            <div className="washi-tape-beige absolute -top-4 left-20 rotate-[-3deg] opacity-80 scale-95"></div>
-                            <div className="washi-tape-beige absolute -top-4 right-20 rotate-[2deg] opacity-80 scale-95"></div>
-                            
-                            {/* Profile Photo / Avatar Stamp */}
-                            <div className="relative">
-                                <div className={`w-52 h-52 rounded-3xl flex items-center justify-center text-8xl font-black shadow-[0_20px_50px_rgba(0,0,0,0.2)] rotate-[-2deg] border-8 transition-all group-hover:rotate-0 duration-700 overflow-hidden ${isDark ? 'bg-violet-900/50 text-violet-200 border-zinc-800' : 'bg-zinc-900 text-white border-white'}`}>
-                                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cardboard.png')] opacity-10"></div>
-                                    <span className="relative z-10 drop-shadow-lg">{userInitial}</span>
-                                </div>
-                                
-                                {/* Verification Stamp */}
-                                <div className="absolute -bottom-6 -right-6 z-20">
-                                    <div className={`w-28 h-28 rounded-full border-2 border-dashed flex items-center justify-center rotate-[15deg] shadow-xl backdrop-blur-md ${isDark ? 'bg-violet-600/20 border-violet-400 text-violet-400' : 'bg-white border-violet-500 text-violet-600'}`}>
-                                        <div className="text-center">
-                                            <p className="text-[7px] font-black tracking-widest uppercase opacity-60">Identity</p>
-                                            <p className="text-sm font-black tracking-tighter">VERIFIED</p>
-                                            <div className="w-10 h-[1px] bg-current opacity-20 mx-auto my-1"></div>
-                                            <p className="text-[7px] font-black tracking-widest italic script-font capitalize">Explorer</p>
-                                        </div>
-                                    </div>
-                                </div>
+                {/* ── PROFILE HEADER ── */}
+                <div className={`p-5 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem] mb-12 ${
+                    isDark ? "glass-premium-dark" : "glass-premium-light"
+                } border flex flex-col md:flex-row items-start md:items-center justify-between gap-8 shadow-sm`}>
+                    
+                    <div className="flex items-center gap-6">
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-black shadow-inner select-none ${
+                            isDark 
+                                ? "bg-zinc-850 text-white border border-zinc-800" 
+                                : "bg-white text-zinc-950 border border-zinc-200/60"
+                        }`}>
+                            {userInitial}
+                        </div>
+                        <div className="space-y-1">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-indigo-500/10 dark:bg-violet-400/10 border border-indigo-500/20 dark:border-violet-400/20">
+                                <span className="text-[8px] tracking-wider uppercase font-black text-indigo-600 dark:text-violet-300">
+                                    ✦ Authenticated Operator
+                                </span>
                             </div>
-
-                            {/* Voyager ID Details */}
-                            <div className="flex-1 text-center md:text-left space-y-6">
-                                <div>
-                                    <span className={`text-[10px] font-black uppercase tracking-[0.4em] mb-2 block ${isDark ? 'text-violet-400' : 'text-violet-500'}`}>Digital Passport</span>
-                                    <h1 className={`text-5xl md:text-7xl font-black tracking-tighter leading-none mb-4 ${isDark ? 'text-white' : 'text-zinc-800'}`}>
-                                        {profile?.name || "Fellow Explorer"}
-                                    </h1>
-                                    <div className="flex items-center justify-center md:justify-start gap-4">
-                                        <div className={`h-[1px] w-12 ${isDark ? 'bg-zinc-700' : 'bg-zinc-200'}`}></div>
-                                        <p className={`font-bold text-[10px] uppercase tracking-widest italic ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                            Voyaging since {new Date(profile?.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex flex-wrap justify-center md:justify-start gap-6">
-                                    <div className={`px-8 py-5 rounded-3xl border shadow-sm transition-all ${isDark ? 'bg-zinc-800/40 border-white/5' : 'bg-violet-50/50 border-violet-100/50'}`}>
-                                        <span className={`block text-3xl font-black tracking-tighter leading-none mb-1 ${isDark ? 'text-violet-300' : 'text-violet-600'}`}>{trips.length}</span>
-                                        <span className="text-[8px] font-black opacity-50 uppercase tracking-widest">Journeys</span>
-                                    </div>
-                                    <div className={`px-8 py-5 rounded-3xl border shadow-sm transition-all ${isDark ? 'bg-zinc-800/40 border-white/5' : 'bg-pink-50/50 border-pink-100/50'}`}>
-                                        <span className={`block text-3xl font-black tracking-tighter leading-none mb-1 ${isDark ? 'text-pink-300' : 'text-pink-600'}`}>{trips.filter(t => t.publicTrip).length}</span>
-                                        <span className="text-[8px] font-black opacity-50 uppercase tracking-widest">Shared</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Actions Area */}
-                            <div className="flex flex-col gap-4 w-full md:w-auto">
-                                <Link to="/generate" className="px-10 py-5 bg-violet-600 text-white text-xs font-bold rounded-[2rem] text-center hover:bg-violet-700 transition-all uppercase tracking-[0.2em] shadow-lg shadow-violet-500/20 hover:-translate-y-1 active:scale-95">
-                                    ✨ New Journey
-                                </Link>
-                                <button onClick={logout} className={`text-[10px] font-black uppercase tracking-widest transition-colors py-2 hover:text-violet-500 ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                                    Logout ➔
-                                </button>
-                            </div>
+                            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-zinc-950 dark:text-white leading-none">
+                                {profile?.name || "Explorer Agent"}
+                            </h1>
+                            <p className={`text-xs font-semibold ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                                {profile?.email}
+                            </p>
                         </div>
                     </div>
+                    
+                    <button 
+                        onClick={logout} 
+                        className={`px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest cursor-pointer transition-all hover:scale-105 active:scale-98 shadow-sm select-none ${
+                            isDark 
+                                ? "bg-white text-zinc-950 hover:bg-zinc-200" 
+                                : "bg-zinc-950 text-white hover:bg-zinc-800"
+                        }`}
+                    >
+                        Sign Out
+                    </button>
                 </div>
-            </div>
 
-            {/* ── THE PERSONAL ARCHIVE ────────────────────────────────────────── */}
-            <div className="relative z-10 max-w-7xl mx-auto px-6 py-12">
-                <div className="flex items-center gap-8 mb-20">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase tracking-[0.5em] text-violet-500 mb-1">Your Narrative</span>
-                        <h2 className={`text-4xl font-black tracking-tighter ${isDark ? 'text-white' : 'text-zinc-800'}`}>Personal Archive</h2>
+                {/* ── METRIC PORTFOLIO STATS ── */}
+                <div className="grid grid-cols-2 gap-8 mb-16">
+                    <div className={`p-6 rounded-3xl border ${
+                        isDark ? "bg-zinc-900/15 border-zinc-800" : "bg-white/40 border-zinc-200"
+                    } backdrop-blur`}>
+                        <p className={`text-[9px] font-black uppercase tracking-wider mb-2 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                            Total Blueprints
+                        </p>
+                        <p className="text-4xl font-black tracking-tight text-zinc-950 dark:text-white">
+                            {canvases.length}
+                        </p>
                     </div>
-                    <div className={`h-[1px] flex-1 ${isDark ? 'bg-zinc-800' : 'bg-violet-100'}`}></div>
-                    <span className="script-font text-violet-500 text-3xl opacity-60">Kyoto Collection</span>
+                    <div className={`p-6 rounded-3xl border ${
+                        isDark ? "bg-zinc-900/15 border-zinc-800" : "bg-white/40 border-zinc-200"
+                    } backdrop-blur`}>
+                        <p className={`text-[9px] font-black uppercase tracking-wider mb-2 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                            Public Blueprints
+                        </p>
+                        <p className="text-4xl font-black tracking-tight text-zinc-950 dark:text-white">
+                            {canvases.filter(c => c.publicCanvas).length}
+                        </p>
+                    </div>
                 </div>
-                
-                {trips.length === 0 ? (
-                    <div className={`p-20 text-center rounded-[3rem] border-2 border-dashed transition-all ${isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white/50 border-violet-100 shadow-sm'}`}>
-                        <div className="text-8xl mb-8 opacity-20 filter grayscale">🗺️</div>
-                        <h3 className={`text-3xl font-black tracking-tighter mb-4 ${isDark ? 'text-zinc-300' : 'text-zinc-800'}`}>The map is blank.</h3>
-                        <p className="text-zinc-400 mb-10 max-w-sm mx-auto font-bold text-[10px] uppercase tracking-widest leading-relaxed">Every legendary voyager started with a single draft. Initialize your first blueprint now.</p>
-                        <Link to="/generate" className="px-12 py-6 bg-violet-600 text-white text-xs font-bold rounded-[2rem] hover:bg-violet-700 transition-all uppercase tracking-widest shadow-xl shadow-violet-500/20">
-                            Start First Log →
-                        </Link>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-                        {trips.map((trip, idx) => (
-                            <div key={trip.id} className="group relative">
-                                {/* Polaroid Glow Effect */}
-                                <div className={`absolute -inset-2 rounded-[2rem] blur-2xl opacity-0 group-hover:opacity-100 transition-all duration-700 ${isDark ? 'bg-violet-500/10' : 'bg-violet-500/5'}`}></div>
-                                
-                                <div className={`relative p-5 rounded-[1.5rem] transition-all duration-700 group-hover:-translate-y-3 border ${idx % 2 === 0 ? 'rotate-[-1deg]' : 'rotate-[1deg]'} ${isDark ? 'bg-zinc-900 border-white/5 shadow-2xl' : 'bg-white border-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.05)]'}`}>
-                                    {/* Washi Tape */}
-                                    <div className="washi-tape-beige absolute -top-4 left-1/2 -translate-x-1/2 rotate-[-2deg] z-20 opacity-70 scale-90"></div>
-                                    
-                                    {/* Trip Polaroid Area */}
-                                    <div className={`relative aspect-[5/4] rounded-xl overflow-hidden mb-6 transition-all group-hover:scale-[1.02] ${isDark ? 'bg-zinc-800' : 'bg-violet-50'}`}>
-                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                            <span className="text-5xl opacity-[0.05] grayscale rotate-12">✈️</span>
-                                        </div>
-                                        {/* Status Badge */}
-                                        <div className="absolute top-4 right-4 z-10">
-                                            <div className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm backdrop-blur-md transition-all ${
-                                                trip.publicTrip 
-                                                ? 'bg-violet-500/20 text-violet-400 border border-violet-400/30' 
-                                                : isDark ? 'bg-zinc-800 text-zinc-500 border border-zinc-700' : 'bg-white text-zinc-400 border border-zinc-100'
-                                            }`}>
-                                                {trip.publicTrip ? '● Shared' : '○ Private'}
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    <div className="px-1 pb-2 space-y-5">
+                {/* ── CABINET TIMELINE LISTING ── */}
+                <div className={`p-5 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem] ${
+                    isDark ? "glass-premium-dark" : "glass-premium-light"
+                } border shadow-sm`}>
+                    <h2 className="text-2xl font-black tracking-tight mb-8 text-zinc-950 dark:text-white">
+                        Personal Blueprint Ledger
+                    </h2>
+                    
+                    {canvases.length === 0 ? (
+                        <div className="text-center py-16">
+                            <span className="text-4xl block mb-4 select-none">🗺️</span>
+                            <p className={`text-xs font-bold mb-6 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                                No travel blueprints registered under this credentials set.
+                            </p>
+                            <Link 
+                                to="/canvas/new" 
+                                className={`px-6 py-3.5 rounded-xl font-bold text-[10px] uppercase tracking-widest inline-block transition-all ${
+                                    isDark ? "bg-white text-zinc-950 hover:bg-zinc-200" : "bg-zinc-950 text-white hover:bg-zinc-800"
+                                }`}
+                            >
+                                Create First Blueprint
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {canvases.map((canvas) => (
+                                <div key={canvas.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between gap-6 py-5 border-b last:border-0 ${
+                                    isDark ? "border-zinc-800/60" : "border-zinc-200/50"
+                                }`}>
+                                    <div className="flex items-center gap-4 flex-1">
+                                        <div className="w-14 h-10 rounded-lg overflow-hidden shrink-0 border border-zinc-200/20 bg-zinc-100 dark:bg-zinc-800 shadow-sm">
+                                            <img 
+                                                src={canvas.coverImage || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?q=80&w=200"} 
+                                                alt={canvas.name} 
+                                                className="w-full h-full object-cover" 
+                                            />
+                                        </div>
                                         <div>
-                                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-violet-500 mb-1.5 block">Log Entry</span>
-                                            <h3 className={`text-3xl font-black tracking-tighter leading-tight ${isDark ? 'text-white' : 'text-zinc-800'}`}>
-                                                {trip.destination}
-                                            </h3>
+                                            <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                                <Link to={`/canvas/${canvas.id}`} className="hover:underline">
+                                                    <h3 className="font-extrabold text-lg tracking-tight text-zinc-950 dark:text-white">
+                                                        {canvas.name}
+                                                    </h3>
+                                                </Link>
+                                            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                                                canvas.publicCanvas 
+                                                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" 
+                                                    : "bg-zinc-500/10 text-zinc-500 border border-zinc-500/20 dark:text-zinc-400"
+                                            }`}>
+                                                {canvas.publicCanvas ? '🌐 Public' : '🔒 Private'}
+                                            </span>
                                         </div>
-
-                                        <div className={`flex items-center justify-between py-4 border-y ${isDark ? 'border-white/5' : 'border-zinc-50'}`}>
-                                            <div className="text-center flex-1 border-r border-zinc-50/10">
-                                                <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Days</p>
-                                                <p className={`text-sm font-bold tracking-tighter ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>{trip.durationDays}</p>
-                                            </div>
-                                            <div className="text-center flex-1">
-                                                <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Budget</p>
-                                                <p className={`text-sm font-bold tracking-tighter ${isDark ? 'text-zinc-300' : 'text-zinc-700'}`}>₹{trip.budget.toLocaleString('en-IN')}</p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="pt-2 flex gap-3">
-                                            <Link to={`/trip/${trip.id}`} className={`flex-1 py-4 text-[10px] font-black rounded-xl text-center transition-all uppercase tracking-widest shadow-lg ${isDark ? 'bg-white text-black hover:bg-violet-50' : 'bg-zinc-900 text-white hover:bg-black shadow-zinc-200'}`}>
-                                                Open Log
-                                            </Link>
-                                            <button 
-                                                onClick={() => handleToggleVisibility(trip.id)}
-                                                className={`flex-1 py-4 text-[10px] font-black rounded-xl transition-all uppercase tracking-widest border ${isDark ? 'bg-zinc-800 text-white border-zinc-700 hover:bg-zinc-700' : 'bg-white text-zinc-800 border-zinc-200 hover:border-violet-300'}`}
-                                            >
-                                                {trip.publicTrip ? 'Privatize' : 'Go Public'}
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDelete(trip.id)}
-                                                className={`w-12 flex items-center justify-center transition-colors rounded-xl border ${isDark ? 'border-zinc-800 text-zinc-700 hover:text-red-400' : 'border-zinc-100 text-zinc-200 hover:text-red-500 hover:bg-red-50'}`}
-                                            >
-                                                <span className="text-xl">×</span>
-                                            </button>
-                                        </div>
+                                        <p className={`text-xs font-semibold ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                                            {getDurationDays(canvas.startDate, canvas.endDate)} • From {canvas.startingLocation || 'Anywhere'}
+                                        </p>
+                                    </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-4 text-[10px] font-extrabold uppercase tracking-widest">
+                                        <button 
+                                            onClick={() => handleToggleVisibility(canvas.id)}
+                                            className={`transition-colors cursor-pointer ${isDark ? "text-zinc-400 hover:text-white" : "text-zinc-500 hover:text-zinc-950"}`}
+                                        >
+                                            {canvas.publicCanvas ? 'Make Private' : 'Make Public'}
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(canvas.id)}
+                                            className={`transition-colors cursor-pointer ${isDark ? "text-zinc-650 hover:text-red-400" : "text-zinc-400 hover:text-red-500"}`}
+                                        >
+                                            Delete
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

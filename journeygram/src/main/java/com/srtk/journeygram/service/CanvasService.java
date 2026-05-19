@@ -71,6 +71,7 @@ public class CanvasService {
         canvas.setOwner(user);
         canvas.setStartingLocation(request.getStartingLocation());
         canvas.setInviteToken(UUID.randomUUID().toString());
+        canvas.setCoverImage(request.getCoverImage());
 
         if (request.getStartDate() != null && !request.getStartDate().isEmpty()) {
             canvas.setStartDate(LocalDate.parse(request.getStartDate()));
@@ -242,6 +243,7 @@ public class CanvasService {
         clone.setEndDate(original.getEndDate());
         clone.setInviteToken(UUID.randomUUID().toString());
         clone.setPublicCanvas(false); // Clones are private by default
+        clone.setCoverImage(original.getCoverImage());
 
         clone = canvasRepository.save(clone);
 

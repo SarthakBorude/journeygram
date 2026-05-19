@@ -15,7 +15,6 @@ const JoinCanvas = () => {
 
     const isDark = theme === 'dark';
 
-    // Fetch canvas info (public endpoint, no auth needed)
     useEffect(() => {
         const fetchInfo = async () => {
             try {
@@ -23,16 +22,14 @@ const JoinCanvas = () => {
                 setCanvasInfo(res.data);
 
                 if (authToken) {
-                    // Logged in — auto-join
                     setStatus('joining');
                     joinCanvas();
                 } else {
-                    // Not logged in — show preview
                     setStatus('preview');
                 }
             } catch (err) {
                 setStatus('error');
-                setError('This invite link is invalid or has expired.');
+                setError('Invite link has expired or is invalid.');
             }
         };
 
@@ -45,7 +42,7 @@ const JoinCanvas = () => {
                 }, 1500);
             } catch (err) {
                 setStatus('error');
-                setError(err.response?.data?.message || 'Failed to join canvas.');
+                setError(err.response?.data?.message || 'Failed to register with co-author board.');
             }
         };
 
@@ -54,125 +51,127 @@ const JoinCanvas = () => {
 
     const handleJoin = () => {
         if (!authToken) {
-            // Save the invite URL so they come back after login
             navigate('/login', { state: { from: `/canvas/join/${inviteToken}` } });
             return;
         }
     };
 
     return (
-        <div className={`min-h-screen flex items-center justify-center font-['Outfit'] px-6 ${isDark ? 'bg-[#09090b] text-white' : 'bg-[#fafafa] text-zinc-900'}`}>
+        <div className={`min-h-screen pt-28 md:pt-40 pb-16 md:pb-24 relative overflow-hidden transition-all duration-700 ${
+            isDark 
+                ? "bg-[#09090b]" 
+                : "bg-[radial-gradient(circle_at_top,#faf8ff_0%,#f3eff9_45%,#ebe4f6_100%)]"
+        }`}>
+            {/* Ambient Lighting Background */}
+            <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-violet-400/10 dark:bg-violet-950/5 blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-[20%] left-[-15%] w-[600px] h-[600px] rounded-full bg-indigo-300/10 dark:bg-indigo-950/5 blur-[140px] pointer-events-none" />
 
-            {/* Background */}
-            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className={`absolute top-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full blur-[120px] ${isDark ? 'bg-emerald-600/15' : 'bg-emerald-500/8'}`}></div>
-                <div className={`absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] ${isDark ? 'bg-sky-600/15' : 'bg-sky-500/8'}`}></div>
-            </div>
+            <div className="max-w-md mx-auto px-6 relative z-10">
+                
+                <div className={`p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] text-center ${
+                    isDark ? "glass-premium-dark" : "glass-premium-light"
+                } border shadow-lg`}>
 
-            <div className="relative z-10 text-center max-w-lg w-full space-y-8">
-
-                {/* Loading */}
-                {status === 'loading' && (
-                    <div className="space-y-4">
-                        <div className="w-16 h-16 mx-auto border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
-                        <p className={`text-sm font-semibold ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Loading invite...</p>
-                    </div>
-                )}
-
-                {/* Preview — not logged in */}
-                {status === 'preview' && canvasInfo && (
-                    <div className={`rounded-[2.5rem] p-10 md:p-12 border space-y-8 ${isDark ? 'bg-white/[0.03] border-white/10' : 'bg-white border-zinc-100 shadow-2xl'}`}>
-                        <div className="space-y-4">
-                            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] font-bold uppercase tracking-[0.3em] ${isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-600'}`}>
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Trip Invitation
-                            </div>
-                            <h1 className="text-3xl md:text-4xl font-bold tracking-tighter">{canvasInfo.name}</h1>
+                    {/* ── LOADING STATE ── */}
+                    {status === 'loading' && (
+                        <div className="flex flex-col items-center py-10 space-y-4">
+                            <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-800 dark:border-zinc-700 dark:border-t-white rounded-full animate-spin"></div>
+                            <span className={`text-xs font-semibold ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Locating Blueprint...</span>
                         </div>
+                    )}
 
-                        <div className={`flex justify-center gap-6 text-xs font-semibold ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                            {canvasInfo.startingLocation && (
-                                <div className="flex items-center gap-1.5">
-                                    <span>📍</span>
-                                    <span>{canvasInfo.startingLocation}</span>
+                    {/* ── PREVIEW STATE (GUEST) ── */}
+                    {status === 'preview' && canvasInfo && (
+                        <div className="space-y-8">
+                            <div className="space-y-3">
+                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 dark:bg-violet-400/10 border border-indigo-500/20 dark:border-violet-400/20">
+                                    <span className="text-[9px] tracking-wider uppercase font-bold text-indigo-600 dark:text-violet-300">
+                                        ✦ Co-Pilot Invite
+                                    </span>
                                 </div>
-                            )}
-                            {canvasInfo.startDate && (
-                                <div className="flex items-center gap-1.5">
-                                    <span>🗓️</span>
-                                    <span>{canvasInfo.startDate} → {canvasInfo.endDate || '...'}</span>
+                                <h1 className="text-3xl font-black tracking-tight text-zinc-950 dark:text-white leading-tight">
+                                    {canvasInfo.name}
+                                </h1>
+                                <p className={`text-xs font-semibold ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                                    You have been dispatched an invite to collaborate and co-pilot this digital travel scrapbook.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className={`p-4 rounded-2xl border ${
+                                    isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-zinc-50 border-zinc-200/50'
+                                }`}>
+                                    <div className="text-2xl font-black text-zinc-950 dark:text-white">{canvasInfo.memberCount}</div>
+                                    <div className={`text-[8.5px] font-bold uppercase tracking-wider mt-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Members</div>
                                 </div>
-                            )}
-                        </div>
-
-                        <div className={`flex justify-center gap-8 py-4 border-y ${isDark ? 'border-white/5' : 'border-zinc-100'}`}>
-                            <div className="text-center">
-                                <div className="text-2xl font-bold">{canvasInfo.memberCount}</div>
-                                <div className={`text-[9px] font-bold uppercase tracking-widest ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>Members</div>
+                                <div className={`p-4 rounded-2xl border ${
+                                    isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-zinc-50 border-zinc-200/50'
+                                }`}>
+                                    <div className="text-2xl font-black text-zinc-950 dark:text-white">{canvasInfo.destinationCount}</div>
+                                    <div className={`text-[8.5px] font-bold uppercase tracking-wider mt-1 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Stops</div>
+                                </div>
                             </div>
-                            <div className="text-center">
-                                <div className="text-2xl font-bold">{canvasInfo.destinationCount}</div>
-                                <div className={`text-[9px] font-bold uppercase tracking-widest ${isDark ? 'text-zinc-600' : 'text-zinc-400'}`}>Destinations</div>
-                            </div>
-                        </div>
 
-                        <div className="space-y-4">
-                            <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                Sign in or create a free account to join this trip and start collaborating!
-                            </p>
-                            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            <div className="space-y-4 pt-4 border-t border-zinc-200/50 dark:border-zinc-800/40">
                                 <button
                                     onClick={handleJoin}
-                                    className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95 shadow-xl ${isDark ? 'bg-white text-black hover:bg-emerald-400' : 'bg-zinc-900 text-white hover:bg-emerald-600'}`}
+                                    className={`w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-widest cursor-pointer transition-all hover:scale-105 active:scale-98 shadow-sm ${
+                                        isDark ? 'bg-white text-zinc-950 hover:bg-zinc-200' : 'bg-zinc-950 text-white hover:bg-zinc-800'
+                                    }`}
                                 >
-                                    🚀 Join This Trip
+                                    Accept Flight Invite
                                 </button>
+                                
                                 <Link
                                     to="/register"
                                     state={{ from: `/canvas/join/${inviteToken}` }}
-                                    className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95 border ${isDark ? 'border-white/10 text-white hover:border-emerald-500' : 'border-zinc-200 text-zinc-600 hover:border-emerald-500'}`}
+                                    className={`w-full py-4 rounded-2xl font-bold text-xs uppercase tracking-widest block transition-all border ${
+                                        isDark ? 'hover:bg-zinc-900 text-zinc-300 border-zinc-850' : 'hover:bg-zinc-50 text-zinc-600 border-zinc-200'
+                                    }`}
                                 >
-                                    Create Account
+                                    Register New Credentials
                                 </Link>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {/* Joining */}
-                {status === 'joining' && (
-                    <div className="space-y-6">
-                        <div className="w-16 h-16 mx-auto border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
-                        <h2 className="text-2xl font-bold tracking-tight">Joining {canvasInfo?.name || 'Canvas'}...</h2>
-                        <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Hang tight, we're adding you to the trip.</p>
-                    </div>
-                )}
+                    {/* ── JOINING STATE ── */}
+                    {status === 'joining' && (
+                        <div className="flex flex-col items-center py-10 space-y-6">
+                            <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-800 dark:border-zinc-700 dark:border-t-white rounded-full animate-spin"></div>
+                            <h2 className="text-xl font-black tracking-tight text-zinc-950 dark:text-white">Linking Credentials...</h2>
+                        </div>
+                    )}
 
-                {/* Success */}
-                {status === 'success' && (
-                    <div className="space-y-6">
-                        <div className="text-6xl">🎉</div>
-                        <h2 className="text-2xl font-bold tracking-tight text-emerald-500">You're In!</h2>
-                        <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                            Welcome to <span className="font-bold">{canvasInfo?.name}</span>. Redirecting to the canvas...
-                        </p>
-                    </div>
-                )}
+                    {/* ── SUCCESS STATE ── */}
+                    {status === 'success' && (
+                        <div className="flex flex-col items-center py-10 space-y-4">
+                            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center text-xl font-black">✓</div>
+                            <h2 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">Credentials Linked</h2>
+                            <p className={`text-xs font-semibold ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>Dispatching you to the active board canvas...</p>
+                        </div>
+                    )}
 
-                {/* Error */}
-                {status === 'error' && (
-                    <div className="space-y-6">
-                        <div className="text-6xl">😕</div>
-                        <h2 className="text-2xl font-bold tracking-tight text-red-500">Couldn't Join</h2>
-                        <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{error}</p>
-                        <button
-                            onClick={() => navigate('/')}
-                            className={`px-8 py-3 rounded-full text-xs font-bold uppercase tracking-widest transition-all ${isDark ? 'bg-white text-black hover:bg-emerald-400' : 'bg-zinc-900 text-white hover:bg-emerald-600'}`}
-                        >
-                            Go Home
-                        </button>
-                    </div>
-                )}
+                    {/* ── ERROR STATE ── */}
+                    {status === 'error' && (
+                        <div className="flex flex-col items-center py-8 space-y-6">
+                            <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center text-xl font-black">✕</div>
+                            <div className="space-y-2">
+                                <h2 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">Invalid Boarding Pass</h2>
+                                <p className={`text-xs font-semibold max-w-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>{error}</p>
+                            </div>
+                            
+                            <button
+                                onClick={() => navigate('/')}
+                                className={`px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest cursor-pointer transition-all hover:scale-105 active:scale-98 shadow-sm ${
+                                    isDark ? 'bg-white text-zinc-950 hover:bg-zinc-200' : 'bg-zinc-950 text-white hover:bg-zinc-800'
+                                }`}
+                            >
+                                Return Home
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
