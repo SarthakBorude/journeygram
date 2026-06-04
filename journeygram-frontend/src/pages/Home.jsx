@@ -300,6 +300,8 @@ const Home = () => {
             <div className="pointer-events-none absolute top-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-violet-300/20 dark:bg-violet-900/10 blur-[150px] z-0" />
             <div className="pointer-events-none absolute bottom-[10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-300/10 dark:bg-indigo-900/5 blur-[120px] z-0" />
 
+
+
             {/* Flight Route Dashed Path & Compass Backdrop */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 select-none">
                 {/* Curved Journey Path */}
@@ -412,7 +414,7 @@ const Home = () => {
                         <div className="relative w-full max-w-[760px]">
 
                             {/* Main Postcard */}
-                            <div className="relative z-20 rotate-[-2deg] translate-y-0 lg:-translate-y-40 transition-transform duration-300 hover:rotate-[-2deg]">
+                            <div className="relative z-20 rotate-[-2deg] translate-y-0 lg:-translate-y-12 transition-transform duration-300 hover:rotate-[-2deg]">
                                 <img
                                     src={postcardImg}
                                     alt="Kyoto Journey"
@@ -421,41 +423,41 @@ const Home = () => {
                             </div>
 
                             {/* Ticket */}
-                            <div className="absolute left-1/2 -translate-x-1/2 xs:left-[7%] xs:translate-x-0 bottom-[-15%] xs:bottom-[0%] z-30 rotate-[6deg] w-[280px] xs:w-[320px] sm:w-[380px] hover:z-50 hover:scale-105 hover:rotate-[3deg] transition-all duration-300">
+                            <div className="absolute left-1/2 -translate-x-1/2 xs:left-[5%] xs:translate-x-0 bottom-[-10%] xs:bottom-[5%] z-30 rotate-[6deg] w-[210px] xs:w-[250px] sm:w-[290px] hover:z-50 hover:scale-105 hover:rotate-[3deg] transition-all duration-300">
 
                                 <div className="rounded-xl overflow-hidden bg-white/90 dark:bg-[#1a1a1f]/90 backdrop-blur-md shadow-[0_15px_45px_rgba(139,92,246,0.15)] border border-white/40 dark:border-white/10">
 
                                     {/* Top */}
-                                    <div className="bg-[#8b5cf6] px-5 py-2.5 flex justify-between items-center text-white">
+                                    <div className="bg-[#8b5cf6] px-4 py-2 flex justify-between items-center text-white">
 
-                                        <span className="text-[9px] tracking-[0.2em] uppercase font-bold">
+                                        <span className="text-[8px] tracking-[0.2em] uppercase font-bold">
                                             Boarding Pass
                                         </span>
 
-                                        <span className="text-[9px] opacity-75 font-semibold">JG 108</span>
+                                        <span className="text-[8px] opacity-75 font-semibold">JG 108</span>
                                     </div>
 
                                     {/* Main */}
-                                    <div className="flex items-center justify-between px-6 py-5">
+                                    <div className="flex items-center justify-between px-4 py-3">
 
                                         <div>
-                                            <p className="text-[8px] tracking-[0.25em] text-[#8f8b9e] dark:text-[#a19d9b] uppercase mb-0.5 font-bold">
+                                            <p className="text-[7px] tracking-[0.25em] text-[#8f8b9e] dark:text-[#a19d9b] uppercase mb-0.5 font-bold">
                                                 From
                                             </p>
 
-                                            <h3 className="text-3xl font-bold tracking-tight text-[#1e1b4b] dark:text-[#f8f4ef]">
+                                            <h3 className="text-2xl font-bold tracking-tight text-[#1e1b4b] dark:text-[#f8f4ef]">
                                                 DEL
                                             </h3>
                                         </div>
 
-                                        <div className="text-[#8b5cf6] text-lg select-none px-2">✈</div>
+                                        <div className="text-[#8b5cf6] text-base select-none px-2">✈</div>
 
                                         <div>
-                                            <p className="text-[8px] tracking-[0.25em] text-[#8f8b9e] dark:text-[#a19d9b] uppercase mb-0.5 font-bold">
+                                            <p className="text-[7px] tracking-[0.25em] text-[#8f8b9e] dark:text-[#a19d9b] uppercase mb-0.5 font-bold">
                                                 To
                                             </p>
 
-                                            <h3 className="text-3xl font-bold tracking-tight text-[#1e1b4b] dark:text-[#f8f4ef]">
+                                            <h3 className="text-2xl font-bold tracking-tight text-[#1e1b4b] dark:text-[#f8f4ef]">
                                                 KIX
                                             </h3>
                                         </div>
@@ -463,20 +465,20 @@ const Home = () => {
                                     </div>
 
                                     {/* Ticket Stub Divider Line */}
-                                    <div className="border-t border-dashed border-[#e6e2f0] dark:border-white/10 mx-6"></div>
+                                    <div className="border-t border-dashed border-[#e6e2f0] dark:border-white/10 mx-4"></div>
 
                                     {/* Bottom details */}
-                                    <div className="flex justify-between px-6 py-3.5 text-[9px] font-semibold text-[#8f8b9e] dark:text-[#a19d9b]">
+                                    <div className="flex justify-between px-4 py-2.5 text-[8px] font-semibold text-[#8f8b9e] dark:text-[#a19d9b]">
                                         <div>
-                                            <span className="block text-[7px] uppercase tracking-wider text-[#b4afc4] mb-0.5">Seat</span>
+                                            <span className="block text-[6px] uppercase tracking-wider text-[#b4afc4] mb-0.5">Seat</span>
                                             <span className="text-[#1e1b4b] dark:text-[#f8f4ef] font-bold">12A</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[7px] uppercase tracking-wider text-[#b4afc4] mb-0.5">Gate</span>
+                                            <span className="block text-[6px] uppercase tracking-wider text-[#b4afc4] mb-0.5">Gate</span>
                                             <span className="text-[#1e1b4b] dark:text-[#f8f4ef] font-bold">B04</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[7px] uppercase tracking-wider text-[#b4afc4] mb-0.5">Boarding</span>
+                                            <span className="block text-[6px] uppercase tracking-wider text-[#b4afc4] mb-0.5">Boarding</span>
                                             <span className="text-[#8b5cf6] font-bold">18:45</span>
                                         </div>
                                     </div>
@@ -484,7 +486,7 @@ const Home = () => {
                             </div>
 
                             {/* Polaroid Strip */}
-                            <div className="hidden md:block absolute right-[-5%] bottom-[40%] z-40 rotate-[-9deg] bg-white/95 dark:bg-white/95 backdrop-blur-xl p-2.5 pb-5 rounded-xs shadow-[0_15px_45px_rgba(139,92,246,0.15)] border border-white/50 dark:border-white/10 hover:z-50 hover:scale-105 hover:rotate-[-2deg] transition-all duration-300 select-none">
+                            <div className="hidden md:block absolute right-[-3%] bottom-[12%] z-40 rotate-[-6deg] bg-white/95 dark:bg-white/95 backdrop-blur-xl p-2 pb-4 rounded-xs shadow-[0_15px_45px_rgba(139,92,246,0.15)] border border-white/50 dark:border-white/10 hover:z-50 hover:scale-105 hover:rotate-[-2deg] transition-all duration-300 select-none">
 
                                 <div className="flex gap-2">
 
@@ -502,7 +504,7 @@ const Home = () => {
                                             title: "Hidden Cafés",
                                         },
                                     ].map((p, i) => (
-                                        <div key={i} className="w-[120px] flex flex-col items-center">
+                                        <div key={i} className="w-[85px] sm:w-[90px] flex flex-col items-center">
 
                                             <div className="w-full aspect-[4/3] overflow-hidden rounded-[1px] border border-neutral-200/50 dark:border-neutral-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
                                                 <img
@@ -513,7 +515,7 @@ const Home = () => {
                                             </div>
 
                                             <p
-                                                className="text-[#8b5cf6] dark:text-[#a78bfa] text-[11px] font-bold mt-1.5 leading-none"
+                                                className="text-[#8b5cf6] dark:text-[#a78bfa] text-[10px] font-bold mt-1.5 leading-none"
                                                 style={{
                                                     fontFamily: "Allura, cursive",
                                                 }}
@@ -521,7 +523,7 @@ const Home = () => {
                                                 Day {i + 1}
                                             </p>
 
-                                            <p className="text-[9px] font-bold text-[#1e1b4b] dark:text-neutral-200 leading-tight tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-center mt-0.5">
+                                            <p className="text-[8px] font-bold text-[#1e1b4b] dark:text-neutral-200 leading-tight tracking-tight whitespace-nowrap overflow-hidden text-ellipsis w-full text-center mt-0.5">
                                                 {p.title}
                                             </p>
                                         </div>
@@ -530,21 +532,21 @@ const Home = () => {
                             </div>
 
                             {/* Vintage Arrival Stamp */}
-                            <div className="hidden sm:block absolute right-[1%] top-[-15%] z-50 opacity-80 rotate-[-15deg] hover:scale-110 hover:rotate-[-10deg] transition-all duration-300 pointer-events-none select-none">
-                                <div className="w-24 h-24 rounded-full border-2 border-dashed border-violet-600/70 dark:border-violet-400/70 flex items-center justify-center text-violet-600/90 dark:text-violet-400/90 p-1">
+                            <div className="hidden sm:block absolute right-[2%] top-[-10%] z-50 opacity-80 rotate-[-15deg] hover:scale-110 hover:rotate-[-10deg] transition-all duration-300 pointer-events-none select-none">
+                                <div className="w-20 h-20 rounded-full border-2 border-dashed border-violet-600/70 dark:border-violet-400/70 flex items-center justify-center text-violet-600/90 dark:text-violet-400/90 p-1">
                                     <div className="w-full h-full rounded-full border border-solid border-violet-600/50 dark:border-violet-400/50 flex items-center justify-center">
                                         <div className="text-center">
-                                            <p className="text-[9px] tracking-[0.3em] uppercase font-black">
+                                            <p className="text-[8px] tracking-[0.3em] uppercase font-black">
                                                 Kyoto
                                             </p>
 
-                                            <p className="text-[7px] tracking-[0.15em] uppercase font-bold mt-0.5">
+                                            <p className="text-[6px] tracking-[0.15em] uppercase font-bold mt-0.5">
                                                 Arrival
                                             </p>
 
-                                            <div className="border-t border-violet-600/30 dark:border-violet-400/30 my-0.5 w-8 mx-auto"></div>
+                                            <div className="border-t border-violet-600/30 dark:border-violet-400/30 my-0.5 w-6 mx-auto"></div>
 
-                                            <p className="text-[6.5px] font-bold tracking-wider">
+                                            <p className="text-[5.5px] font-bold tracking-wider">
                                                 24 MAY 2026
                                             </p>
                                         </div>
