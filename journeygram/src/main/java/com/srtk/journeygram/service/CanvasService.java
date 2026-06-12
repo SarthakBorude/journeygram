@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.srtk.journeygram.dto.CanvasDestinationRequest;
 import com.srtk.journeygram.dto.CanvasItemRequest;
 import com.srtk.journeygram.dto.CanvasRequest;
+import com.srtk.journeygram.exception.ForbiddenException;
+import com.srtk.journeygram.exception.ResourceNotFoundException;
 import com.srtk.journeygram.model.*;
 import com.srtk.journeygram.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
@@ -45,24 +48,25 @@ public class CanvasService {
                 .getAuthentication()
                 .getName();
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
     // ── Verify user is a member of the canvas ─────────────────
     private void verifyMembership(TripCanvas canvas, User user) {
         if (!memberRepository.existsByCanvasAndUser(canvas, user)) {
-            throw new RuntimeException("You are not a member of this canvas");
+            throw new ForbiddenException("You are not a member of this canvas");
         }
     }
 
     // ── Verify user is the owner of the canvas ────────────────
     private void verifyOwnership(TripCanvas canvas, User user) {
         if (!canvas.getOwner().getId().equals(user.getId())) {
-            throw new RuntimeException("Only the canvas owner can perform this action");
+            throw new ForbiddenException("Only the canvas owner can perform this action");
         }
     }
 
     // ── Create a new canvas ───────────────────────────────────
+    @Transactional
     public TripCanvas createCanvas(CanvasRequest request) {
         User user = getCurrentUser();
 
@@ -92,16 +96,60 @@ public class CanvasService {
         return canvasRepository.findById(canvas.getId()).orElseThrow();
     }
 
-    // ── Get all canvases for current user ─────────────────────
-    public List<TripCanvas> getMyCanvases() {
+    // ── Update canvas ─────────────────────────────────────────
+    @Transactional
+    public TripCanvas updateCanvas(Long canvasId, CanvasRequest request) {
+        TripCanvas canvas = canvasRepository.findById(canvasId)
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
+
         User user = getCurrentUser();
-        return canvasRepository.findCanvasesByUser(user);
+        verifyOwnership(canvas, user);
+
+        if (request.getName() != null) canvas.setName(request.getName());
+        if (request.getStartingLocation() != null) canvas.setStartingLocation(request.getStartingLocation());
+        if (request.getCoverImage() != null) canvas.setCoverImage(request.getCoverImage());
+
+        if (request.getStartDate() != null && !request.getStartDate().isEmpty()) {
+            canvas.setStartDate(LocalDate.parse(request.getStartDate()));
+        }
+        if (request.getEndDate() != null && !request.getEndDate().isEmpty()) {
+            canvas.setEndDate(LocalDate.parse(request.getEndDate()));
+        }
+
+        return canvasRepository.save(canvas);
+    }
+
+    // ── Get all canvases for current user (with optional status filter) ──
+    @Transactional(readOnly = true)
+    public List<TripCanvas> getMyCanvases(String status) {
+        User user = getCurrentUser();
+        List<TripCanvas> canvases = canvasRepository.findCanvasesByUser(user);
+
+        if (status == null || status.isBlank()) {
+            return canvases;
+        }
+
+        LocalDate today = LocalDate.now();
+        return canvases.stream().filter(c -> {
+            switch (status.toLowerCase()) {
+                case "upcoming":
+                    return c.getStartDate() != null && c.getStartDate().isAfter(today);
+                case "active":
+                    return c.getStartDate() != null && c.getEndDate() != null
+                            && !today.isBefore(c.getStartDate()) && !today.isAfter(c.getEndDate());
+                case "past":
+                    return c.getEndDate() != null && c.getEndDate().isBefore(today);
+                default:
+                    return true;
+            }
+        }).collect(Collectors.toList());
     }
 
     // ── Get a single canvas by ID (with membership check) ────
+    @Transactional(readOnly = true)
     public TripCanvas getCanvasById(Long canvasId) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         verifyMembership(canvas, user);
@@ -116,9 +164,10 @@ public class CanvasService {
     }
 
     // ── Get canvas info by invite token (Public preview) ──────
+    @Transactional(readOnly = true)
     public Map<String, Object> getCanvasInfoByToken(String inviteToken) {
         TripCanvas canvas = canvasRepository.findByInviteToken(inviteToken)
-                .orElseThrow(() -> new RuntimeException("Invalid invite link"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid invite link"));
 
         Map<String, Object> info = new HashMap<>();
         info.put("name", canvas.getName());
@@ -131,9 +180,10 @@ public class CanvasService {
     }
 
     // ── Get canvas by share token (Public view) ───────────────
+    @Transactional(readOnly = true)
     public TripCanvas getCanvasByShareToken(String token) {
         TripCanvas canvas = canvasRepository.findByShareToken(token)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         // Enrich with social data (use null for user if not logged in)
         User user = null;
@@ -144,9 +194,10 @@ public class CanvasService {
     }
 
     // ── Toggle visibility ─────────────────────────────────────
+    @Transactional
     public TripCanvas toggleVisibility(Long canvasId) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         verifyOwnership(canvas, user);
@@ -161,9 +212,10 @@ public class CanvasService {
     }
 
     // ── Toggle like on canvas ─────────────────────────────────
+    @Transactional
     public TripCanvas toggleCanvasLike(Long canvasId) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         // Can only like public canvases or ones you are a member of
@@ -189,9 +241,10 @@ public class CanvasService {
     }
 
     // ── Comments ──────────────────────────────────────────────
+    @Transactional
     public CanvasComment postCanvasComment(Long canvasId, String content) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         if (!canvas.isPublicCanvas()) {
@@ -206,13 +259,15 @@ public class CanvasService {
         return canvasCommentRepository.save(comment);
     }
 
+    @Transactional(readOnly = true)
     public List<CanvasComment> getCanvasComments(Long canvasId) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
         return canvasCommentRepository.findByCanvasOrderByCreatedAtDesc(canvas);
     }
 
     // ── Explore feed ──────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<TripCanvas> getExploreFeed() {
         User user = null;
         try { user = getCurrentUser(); } catch (Exception e) {}
@@ -226,9 +281,10 @@ public class CanvasService {
     }
 
     // ── Clone canvas ──────────────────────────────────────────
+    @Transactional
     public TripCanvas cloneCanvas(Long canvasId) {
         TripCanvas original = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         if (!original.isPublicCanvas()) {
@@ -318,9 +374,10 @@ public class CanvasService {
     }
 
     // ── Join canvas via invite token ──────────────────────────
+    @Transactional
     public TripCanvas joinCanvas(String inviteToken) {
         TripCanvas canvas = canvasRepository.findByInviteToken(inviteToken)
-                .orElseThrow(() -> new RuntimeException("Invalid invite link"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invalid invite link"));
 
         User user = getCurrentUser();
 
@@ -339,9 +396,10 @@ public class CanvasService {
     }
 
     // ── Get canvas members ────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<CanvasMember> getMembers(Long canvasId) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         verifyMembership(canvas, user);
@@ -350,9 +408,10 @@ public class CanvasService {
     }
 
     // ── Delete canvas (owner only) ────────────────────────────
+    @Transactional
     public void deleteCanvas(Long canvasId) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         verifyOwnership(canvas, user);
@@ -361,9 +420,10 @@ public class CanvasService {
     }
 
     // ── Add destination to canvas ─────────────────────────────
+    @Transactional
     public CanvasDestination addDestination(Long canvasId, CanvasDestinationRequest request) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         verifyMembership(canvas, user);
@@ -379,9 +439,10 @@ public class CanvasService {
     }
 
     // ── Remove destination ────────────────────────────────────
+    @Transactional
     public void removeDestination(Long destinationId) {
         CanvasDestination destination = destinationRepository.findById(destinationId)
-                .orElseThrow(() -> new RuntimeException("Destination not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Destination not found"));
 
         User user = getCurrentUser();
         verifyMembership(destination.getCanvas(), user);
@@ -390,9 +451,10 @@ public class CanvasService {
     }
 
     // ── Add item to destination ───────────────────────────────
+    @Transactional
     public CanvasItem addItem(Long destinationId, CanvasItemRequest request) {
         CanvasDestination destination = destinationRepository.findById(destinationId)
-                .orElseThrow(() -> new RuntimeException("Destination not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Destination not found"));
 
         User user = getCurrentUser();
         verifyMembership(destination.getCanvas(), user);
@@ -414,9 +476,10 @@ public class CanvasService {
     }
 
     // ── Update item ───────────────────────────────────────────
+    @Transactional
     public CanvasItem updateItem(Long itemId, CanvasItemRequest request) {
         CanvasItem item = itemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Item not found"));
 
         User user = getCurrentUser();
         verifyMembership(item.getDestination().getCanvas(), user);
@@ -431,9 +494,10 @@ public class CanvasService {
     }
 
     // ── Remove item ───────────────────────────────────────────
+    @Transactional
     public void removeItem(Long itemId) {
         CanvasItem item = itemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Item not found"));
 
         User user = getCurrentUser();
         verifyMembership(item.getDestination().getCanvas(), user);
@@ -442,45 +506,60 @@ public class CanvasService {
     }
 
     // ── Reorder destinations ──────────────────────────────────
+    @Transactional
     public List<CanvasDestination> reorderDestinations(Long canvasId, List<Long> orderedIds) {
         TripCanvas canvas = canvasRepository.findById(canvasId)
-                .orElseThrow(() -> new RuntimeException("Canvas not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Canvas not found"));
 
         User user = getCurrentUser();
         verifyMembership(canvas, user);
 
+        // Batch fetch all destinations at once instead of N+1 queries
+        List<CanvasDestination> destinations = destinationRepository.findAllById(orderedIds);
+        Map<Long, CanvasDestination> destMap = destinations.stream()
+                .collect(Collectors.toMap(CanvasDestination::getId, d -> d));
+
         for (int i = 0; i < orderedIds.size(); i++) {
-            CanvasDestination dest = destinationRepository.findById(orderedIds.get(i))
-                    .orElseThrow(() -> new RuntimeException("Destination not found"));
-            dest.setSortOrder(i);
-            destinationRepository.save(dest);
+            CanvasDestination dest = destMap.get(orderedIds.get(i));
+            if (dest != null) {
+                dest.setSortOrder(i);
+            }
         }
+        destinationRepository.saveAll(destinations);
 
         return destinationRepository.findByCanvasOrderBySortOrderAsc(canvas);
     }
 
     // ── Reorder items within a destination ────────────────────
+    @Transactional
     public List<CanvasItem> reorderItems(Long destinationId, List<Long> orderedIds) {
         CanvasDestination destination = destinationRepository.findById(destinationId)
-                .orElseThrow(() -> new RuntimeException("Destination not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Destination not found"));
 
         User user = getCurrentUser();
         verifyMembership(destination.getCanvas(), user);
 
+        // Batch fetch all items at once instead of N+1 queries
+        List<CanvasItem> items = itemRepository.findAllById(orderedIds);
+        Map<Long, CanvasItem> itemMap = items.stream()
+                .collect(Collectors.toMap(CanvasItem::getId, i -> i));
+
         for (int i = 0; i < orderedIds.size(); i++) {
-            CanvasItem item = itemRepository.findById(orderedIds.get(i))
-                    .orElseThrow(() -> new RuntimeException("Item not found"));
-            item.setSortOrder(i);
-            itemRepository.save(item);
+            CanvasItem item = itemMap.get(orderedIds.get(i));
+            if (item != null) {
+                item.setSortOrder(i);
+            }
         }
+        itemRepository.saveAll(items);
 
         return itemRepository.findByDestinationOrderBySortOrderAsc(destination);
     }
 
     // ── Get AI suggestions for a destination ──────────────────
+    @Transactional(readOnly = true)
     public List<Map<String, Object>> getAiSuggestions(Long destinationId) {
         CanvasDestination destination = destinationRepository.findById(destinationId)
-                .orElseThrow(() -> new RuntimeException("Destination not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Destination not found"));
 
         User user = getCurrentUser();
         verifyMembership(destination.getCanvas(), user);
@@ -516,9 +595,10 @@ public class CanvasService {
     }
 
     // ── Toggle vote on an item ────────────────────────────────
+    @Transactional
     public CanvasItem toggleItemVote(Long itemId) {
         CanvasItem item = itemRepository.findById(itemId)
-                .orElseThrow(() -> new RuntimeException("Item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Item not found"));
 
         User user = getCurrentUser();
         verifyMembership(item.getDestination().getCanvas(), user);
@@ -545,7 +625,7 @@ public class CanvasService {
         return item;
     }
 
-    // ── Gemini API call (reused pattern from TripService) ─────
+    // ── Gemini API call ───────────────────────────────────────
     private String callGemini(String prompt) {
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" +
                 "gemini-flash-latest:generateContent?key=" + geminiApiKey;
@@ -578,6 +658,7 @@ public class CanvasService {
             raw = raw.replace("```json", "").replace("```", "").trim();
             return raw;
         } catch (Exception e) {
+            log.error("Gemini API call failed: {}", e.getMessage());
             throw new RuntimeException("Failed to call Gemini API: " + e.getMessage());
         }
     }

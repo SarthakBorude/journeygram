@@ -5,6 +5,7 @@ import com.srtk.journeygram.dto.CanvasItemRequest;
 import com.srtk.journeygram.dto.CanvasRequest;
 import com.srtk.journeygram.model.*;
 import com.srtk.journeygram.service.CanvasService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,7 +16,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/canvas")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class CanvasController {
 
     private final CanvasService canvasService;
@@ -23,13 +23,14 @@ public class CanvasController {
     // ── Canvas CRUD ───────────────────────────────────────────
 
     @PostMapping
-    public ResponseEntity<TripCanvas> createCanvas(@RequestBody CanvasRequest request) {
+    public ResponseEntity<TripCanvas> createCanvas(@Valid @RequestBody CanvasRequest request) {
         return ResponseEntity.ok(canvasService.createCanvas(request));
     }
 
     @GetMapping("/my")
-    public ResponseEntity<List<TripCanvas>> getMyCanvases() {
-        return ResponseEntity.ok(canvasService.getMyCanvases());
+    public ResponseEntity<List<TripCanvas>> getMyCanvases(
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(canvasService.getMyCanvases(status));
     }
 
     @GetMapping("/{id}")
@@ -37,10 +38,17 @@ public class CanvasController {
         return ResponseEntity.ok(canvasService.getCanvasById(id));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<TripCanvas> updateCanvas(
+            @PathVariable Long id,
+            @Valid @RequestBody CanvasRequest request) {
+        return ResponseEntity.ok(canvasService.updateCanvas(id, request));
+    }
+
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteCanvas(@PathVariable Long id) {
+    public ResponseEntity<Map<String, String>> deleteCanvas(@PathVariable Long id) {
         canvasService.deleteCanvas(id);
-        return ResponseEntity.ok("Canvas deleted successfully");
+        return ResponseEntity.ok(Map.of("message", "Canvas deleted successfully"));
     }
 
     // ── Invite / Join ─────────────────────────────────────────
@@ -60,14 +68,14 @@ public class CanvasController {
     @PostMapping("/{id}/destinations")
     public ResponseEntity<CanvasDestination> addDestination(
             @PathVariable Long id,
-            @RequestBody CanvasDestinationRequest request) {
+            @Valid @RequestBody CanvasDestinationRequest request) {
         return ResponseEntity.ok(canvasService.addDestination(id, request));
     }
 
     @DeleteMapping("/destinations/{destId}")
-    public ResponseEntity<String> removeDestination(@PathVariable Long destId) {
+    public ResponseEntity<Map<String, String>> removeDestination(@PathVariable Long destId) {
         canvasService.removeDestination(destId);
-        return ResponseEntity.ok("Destination removed");
+        return ResponseEntity.ok(Map.of("message", "Destination removed"));
     }
 
     @PutMapping("/{id}/destinations/reorder")
@@ -82,7 +90,7 @@ public class CanvasController {
     @PostMapping("/destinations/{destId}/items")
     public ResponseEntity<CanvasItem> addItem(
             @PathVariable Long destId,
-            @RequestBody CanvasItemRequest request) {
+            @Valid @RequestBody CanvasItemRequest request) {
         return ResponseEntity.ok(canvasService.addItem(destId, request));
     }
 
@@ -94,9 +102,9 @@ public class CanvasController {
     }
 
     @DeleteMapping("/items/{itemId}")
-    public ResponseEntity<String> removeItem(@PathVariable Long itemId) {
+    public ResponseEntity<Map<String, String>> removeItem(@PathVariable Long itemId) {
         canvasService.removeItem(itemId);
-        return ResponseEntity.ok("Item removed");
+        return ResponseEntity.ok(Map.of("message", "Item removed"));
     }
 
     @PutMapping("/destinations/{destId}/items/reorder")

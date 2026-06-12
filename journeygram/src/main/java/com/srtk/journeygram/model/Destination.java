@@ -1,10 +1,14 @@
 package com.srtk.journeygram.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+import java.time.LocalDateTime;
+import java.util.Objects;
+
+@Getter
+@Setter
 @Entity
 @Table(name = "destinations")
 public class Destination {
@@ -26,4 +30,17 @@ public class Destination {
     private int searchCount = 0;
     
     private LocalDateTime lastUpdated = LocalDateTime.now();
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Destination that = (Destination) o;
+        return id != null && Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

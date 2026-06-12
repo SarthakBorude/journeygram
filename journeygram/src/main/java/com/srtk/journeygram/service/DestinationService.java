@@ -3,9 +3,11 @@ package com.srtk.journeygram.service;
 import com.srtk.journeygram.model.Destination;
 import com.srtk.journeygram.repository.DestinationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
@@ -16,14 +18,16 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DestinationService {
 
     private final DestinationRepository destinationRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Value("${groq.api.key}")
     private String groqApiKey;
 
+    @Transactional
     public Destination getDestinationInfo(String name) {
         Optional<Destination> existing = destinationRepository.findByNameIgnoreCase(name);
         
@@ -48,6 +52,7 @@ public class DestinationService {
         return destinationRepository.save(destination);
     }
 
+    @Transactional(readOnly = true)
     public List<Destination> getTrending() {
         return destinationRepository.findTop10ByOrderBySearchCountDesc();
     }
@@ -84,8 +89,7 @@ public class DestinationService {
             List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
             return (String) ((Map<String, Object>) choices.get(0).get("message")).get("content");
         } catch (Exception e) {
-            System.err.println("Groq Error: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Groq API call failed for {}: {}", cityName, e.getMessage());
             throw new RuntimeException("Failed to fetch info from Groq: " + e.getMessage());
         }
     }

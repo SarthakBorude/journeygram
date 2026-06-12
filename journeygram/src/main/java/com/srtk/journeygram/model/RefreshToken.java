@@ -1,46 +1,51 @@
 package com.srtk.journeygram.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
+import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Entity
-@Table(name = "canvas_item_votes",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"item_id", "user_id"}))
+@Table(name = "refresh_tokens")
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
-public class CanvasItemVote {
+@AllArgsConstructor
+public class RefreshToken {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "item_id", nullable = false)
-    @JsonIgnore
-    private CanvasItem item;
+    @Column(nullable = false, unique = true)
+    private String token;
 
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @CreationTimestamp
-    private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime expiresAt;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(nullable = false)
+    private boolean revoked = false;
+
+    public boolean isExpired() {
+        return LocalDateTime.now().isAfter(expiresAt);
+    }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        CanvasItemVote that = (CanvasItemVote) o;
+        RefreshToken that = (RefreshToken) o;
         return id != null && Objects.equals(id, that.id);
     }
 
